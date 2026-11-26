@@ -625,11 +625,12 @@ function calcMes(m, dias, comp, ant) {
   const metaFat = m.meta_faturamento == null ? null : +m.meta_faturamento;
   const venda = m.venda_realizada == null ? null : +m.venda_realizada;
   const cob = m.cobranca_realizada != null ? +m.cobranca_realizada : venda != null ? real - venda : null;
-  // Mesma regra do painel do Leo: atualização feita antes das 18h deixa o dia de hoje incompleto; a média usa até ontem.
+  // Mesma regra do painel do Leo: se a última atualização foi hoje antes das 18h, o dia de hoje está incompleto e a média usa até ontem.
   let hojeR = 0, hojeV = 0, hojeC = 0;
   if (m.orto_importado_em && ult) {
     const imp = new Date(m.orto_importado_em), dImp = imp.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }), hImp = +imp.toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
-    if (ult === dImp && hImp < 18 && du.includes(ult) && passados > 1) { const d = dias.find(x => x.data === ult) || {}; hojeR = +d.recebido || 0; hojeV = +d.venda || 0; hojeC = +d.cobranca || 0; passados -= 1; }
+    const hoje = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+    if (ult === dImp && ult === hoje && hImp < 18 && du.includes(ult) && passados > 1) { const d = dias.find(x => x.data === ult) || {}; hojeR = +d.recebido || 0; hojeV = +d.venda || 0; hojeC = +d.cobranca || 0; passados -= 1; }
   }
   const faltam = Math.max(0, total - passados);
   const proj = (v, hoje) => v == null || !passados ? null : (v - hoje) / passados * total;

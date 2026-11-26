@@ -38,6 +38,18 @@ const ico = {
 const svg = (k, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${ico[k]}</svg>`;
 const q = async p => { const { data, error } = await p; if (error) throw error; return data; };
 
+/* ---------- copiar texto sem trocar de tela ----------
+   Ao selecionar texto (arrastando o mouse ou segurando o dedo), o navegador dispara um "clique" no fim do gesto.
+   Se houver texto selecionado, esse clique é ignorado para não abrir links, trocar de mês ou fechar janelas. */
+let ptrIni = null;
+document.addEventListener("pointerdown", e => { ptrIni = { x: e.clientX, y: e.clientY, t: Date.now() }; }, true);
+document.addEventListener("click", e => {
+  const sel = window.getSelection && window.getSelection(), temSel = sel && !sel.isCollapsed && sel.toString().trim().length > 0;
+  const arrastou = ptrIni && (Math.abs(e.clientX - ptrIni.x) > 6 || Math.abs(e.clientY - ptrIni.y) > 6);
+  const longo = ptrIni && Date.now() - ptrIni.t > 600;
+  if ((temSel || arrastou || longo) && !e.target.closest("input,select,textarea,label,button[type=submit]")) { e.preventDefault(); e.stopPropagation(); }
+}, true);
+
 /* ---------- estado ---------- */
 const S = { me: null, parts: [], ext: [], clins: [], res: [], reps: [], docs: [], adm: null, mes: {}, filtroRep: "pend" };
 

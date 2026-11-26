@@ -58,11 +58,11 @@
     return out;
   }
 
-  /* Dias úteis: segunda a sábado, sem feriados nacionais */
+  /* Dias úteis: segunda a sábado, sem feriados (mesma lista do painel Dashboards Orthopride) */
   function pascoa(Y) { const a = Y % 19, b = Math.floor(Y / 100), c = Y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1; return Date.UTC(Y, mes - 1, dia); }
   function feriados(ano) {
     const p = pascoa(ano), f = ms => new Date(p + ms * 864e5).toISOString().slice(0, 10);
-    return new Set([`${ano}-01-01`, `${ano}-04-21`, `${ano}-05-01`, `${ano}-09-07`, `${ano}-10-12`, `${ano}-11-02`, `${ano}-11-15`, `${ano}-11-20`, `${ano}-12-25`, f(-48), f(-47), f(-2), f(60)]);
+    return new Set([`${ano}-01-01`, `${ano}-04-21`, `${ano}-05-01`, `${ano}-09-07`, `${ano}-10-12`, `${ano}-11-02`, `${ano}-11-15`, `${ano}-11-20`, `${ano}-12-24`, `${ano}-12-25`, `${ano}-12-31`, f(-48), f(-47), f(-46), f(-2), f(-1), f(60)]);
   }
   function diasUteis(competencia) {
     const [a, m] = competencia.split("-").map(Number), fer = feriados(a), out = [];

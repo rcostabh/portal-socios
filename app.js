@@ -10,6 +10,8 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const norm = s => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 const NB = " ";
 const fBRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const fBRL0 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const brl0 = v => v == null || isNaN(v) ? "—" : fBRL0.format(v).replace(/\s/g, NB);
 const brl = v => v == null || isNaN(v) ? "—" : fBRL.format(v).replace(/\s/g, NB);
 const brlK = v => { if (v == null || isNaN(v)) return "—"; const a = Math.abs(v), s = v < 0 ? "−" : ""; if (a >= 1e6) return `${s}R$${NB}${(a / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}${NB}mi`; if (a >= 1e3) return `${s}R$${NB}${(a / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}${NB}mil`; return `${s}R$${NB}${a.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`; };
 const pct = (v, d = 1) => v == null || !isFinite(v) ? "—" : (v * 100).toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }) + "%";
@@ -154,11 +156,11 @@ async function boot() {
 async function refresh() { await loadSocio(); if (S.me.admin) await loadAdmin(); route(); }
 
 /* ---------- moldura ---------- */
-function frame(active, body) {
+function frame(active, body, largo = false) {
   charts.clear();
   const nav = [["inicio", "home", "Início"], ["repasses", "cash", "Repasses"], ["documentos", "doc", "Documentos"]];
   if (S.me.admin) nav.push(["admin", "gear", "Gestão"]);
-  $app.innerHTML = `<div class="wrap"><div class="top"><div class="who">${esc(S.me.nome)}<small>${esc(S.me.email)}</small></div>
+  $app.innerHTML = `<div class="wrap${largo ? " largo" : ""}"><div class="top"><div class="who">${esc(S.me.nome)}<small>${esc(S.me.email)}</small></div>
     <button class="btn small" id="sair" aria-label="Sair">${svg("out")}Sair</button></div>${body}</div>
     <nav class="bottom" aria-label="Navegação">${nav.map(([h, i, t]) => `<a href="#${h}" ${active === h ? 'aria-current="page"' : ""}>${svg(i)}${t}</a>`).join("")}</nav>`;
   document.getElementById("sair").onclick = async () => { await sb.auth.signOut(); location.hash = ""; viewLogin(); };
@@ -187,41 +189,68 @@ function partsPorClinica() {
 const descPart = o => [o.direta != null ? `${pnum(o.direta)}% da clínica` : "", ...o.ind.map(i => `${pnum(i.percentual)}% da parte de ${i.origem_nome}`)].filter(Boolean).join(" + ");
 
 /* ---------- Início ---------- */
+function linhasGrade() {
+  const ext = new Map(S.ext.map(r => [`${r.clinica_id}|${r.competencia}`, r]));
+  const nome = id => (S.clins.find(c => c.id === id) || {}).nome || `Clínica ${id}`;
+  const out = S.res.filter(r => r.faturamento != null || r.despesas != null).map(r => {
+    const e = ext.get(`${r.clinica_id}|${r.competencia}`) || {}, dev = +e.devido || 0, pago = +e.pago || 0, saldo = +e.saldo || 0;
+    return { c: r.competencia, cid: r.clinica_id, clinica: nome(r.clinica_id), ini: r.inicios, fat: r.faturamento == null ? null : +r.faturamento, desp: r.despesas == null ? null : +r.despesas,
+      res: (+r.faturamento || 0) - (+r.despesas || 0), lucro: r.lucro_distribuido == null ? null : +r.lucro_distribuido, dev, pago, saldo,
+      st: saldo > 0.009 ? (pago > 0.009 ? "parcial" : "pendente") : dev > 0.009 ? "pago" : "sem" };
+  });
+  for (const e of S.ext) if (!out.some(o => o.cid === e.clinica_id && o.c === e.competencia) && (+e.devido || +e.pago))
+    out.push({ c: e.competencia, cid: e.clinica_id, clinica: e.clinica_nome, ini: null, fat: null, desp: null, res: null, lucro: e.lucro_clinica == null ? null : +e.lucro_clinica, dev: +e.devido, pago: +e.pago, saldo: +e.saldo, st: +e.saldo > 0.009 ? "pendente" : "pago" });
+  return out;
+}
+function carregarFiltro() { try { return JSON.parse(localStorage.getItem("soc-filtro") || "null") || {}; } catch (_) { return {}; } }
 function viewInicio() {
-  const inv = sum(S.parts.filter(p => p.tipo === "direta"), p => p.valor_investido);
-  const rec = sum(S.ext, r => r.pago), dev = sum(S.ext, r => r.devido);
-  const pend = S.ext.filter(r => +r.saldo > 0.009), aRec = sum(pend, r => r.saldo);
-  const meses = meusMeses(), ano = new Date().getFullYear();
-  const clinicas = partsPorClinica();
-  const first = S.me.nome.split(" ")[0];
-  const sel = S.mes.inicio ?? meses.length - 1;
+  const F = S.filtro || (S.filtro = Object.assign({ cid: "", de: "", ate: "", st: "", ord: "desc" }, carregarFiltro()));
+  try { localStorage.setItem("soc-filtro", JSON.stringify(F)); } catch (_) {}
+  const todas = linhasGrade();
+  const meses = [...new Set(todas.map(r => r.c))].sort();
+  let rows = todas.filter(r => (!F.cid || r.cid === +F.cid) && (!F.de || r.c >= F.de + "-01") && (!F.ate || r.c <= F.ate + "-01") &&
+    (!F.st || (F.st === "pend" ? r.st === "pendente" || r.st === "parcial" : r.st === F.st)));
+  rows.sort((a, b) => (a.c < b.c ? 1 : a.c > b.c ? -1 : a.clinica.localeCompare(b.clinica)) * (F.ord === "asc" ? -1 : 1));
+  const partsF = S.parts.filter(p => p.tipo === "direta" && (!F.cid || p.clinica_id === +F.cid));
+  const inv = sum(partsF, p => p.valor_investido), rec = sum(rows, r => r.pago), dev = sum(rows, r => r.dev), aRec = sum(rows.filter(r => r.saldo > 0.009), r => r.saldo);
+  const nPend = rows.filter(r => r.saldo > 0.009).length, first = S.me.nome.split(" ")[0];
+  const filtrado = F.cid || F.de || F.ate || F.st;
+  const clinIds = [...new Set(todas.map(r => r.cid))];
+  const opt = (v, t, s) => `<option value="${esc(v)}" ${String(s) === String(v) ? "selected" : ""}>${esc(t)}</option>`;
+  const stTag = r => r.st === "pendente" ? `<span class="tag neg">falta ${brl0(r.saldo)}</span>` : r.st === "parcial" ? `<span class="tag neg">parcial · falta ${brl0(r.saldo)}</span>` : r.st === "pago" ? `<span class="tag pos">pago</span>` : `<span class="tag">sem lucro</span>`;
+  const tot = { fat: sum(rows, r => r.fat), desp: sum(rows, r => r.desp), res: sum(rows, r => r.res), lucro: sum(rows, r => r.lucro), ini: sum(rows, r => r.ini) };
   frame("inicio", `
     <h1>${aRec > 0.009 ? `${esc(first)}, faltam ${brlK(aRec)} para você receber` : `${esc(first)}, seus repasses estão em dia`}</h1>
-    <p class="sub">Você já recebeu ${brl(rec)}${inv ? `, ${pct(rec / inv)} do que investiu` : ""}.</p>
+    <p class="sub">${filtrado ? "Números de acordo com os filtros abaixo." : `Você já recebeu ${brl(rec)}${inv ? `, ${pct(rec / inv)} do que investiu` : ""}.`}</p>
     <div class="kpis">
-      <div class="kpi"><div class="l">Investido</div><div class="v">${brlK(inv)}</div><span class="d mut">${clinicas.length} clínica${clinicas.length === 1 ? "" : "s"}</span></div>
+      <div class="kpi"><div class="l">Investido</div><div class="v">${brlK(inv)}</div><span class="d mut">${F.cid ? esc((S.clins.find(c => c.id === +F.cid) || {}).nome || "") : `${clinIds.length} clínica${clinIds.length === 1 ? "" : "s"}`}</span></div>
       <div class="kpi"><div class="l">Recebido</div><div class="v">${brlK(rec)}</div><span class="d mut">de ${brlK(dev)} gerados</span></div>
       <div class="kpi"><div class="l">Retorno</div><div class="v">${inv ? pct(rec / inv) : "—"}</div><span class="d mut">sobre o investido</span></div>
-      <div class="kpi ${aRec > 0.009 ? "alert" : ""}"><div class="l">A receber</div><div class="v">${brlK(aRec)}</div><span class="d">${aRec > 0.009 ? `${pend.length} pendência${pend.length === 1 ? "" : "s"}` : "nada pendente"}</span></div>
+      <div class="kpi ${aRec > 0.009 ? "alert" : ""}"><div class="l">A receber</div><div class="v">${brlK(aRec)}</div><span class="d">${nPend ? `${nPend} pendência${nPend === 1 ? "" : "s"}` : "nada pendente"}</span></div>
     </div>
-    ${aRec > 0.009 ? `<a class="banner" href="#repasses" style="text-decoration:none">${svg("warn")}<span><b>Repasses pendentes:</b> ${pend.slice(-3).reverse().map(r => `${esc(r.clinica_nome)} ${ml(r.competencia)} (${brl(+r.saldo)})`).join(" · ")}${pend.length > 3 ? " e outros" : ""}. Toque para ver.</span></a>` : ""}
-    <div class="grid two">
-      <div class="card"><h2>Sua parte mês a mês</h2>
-        <div class="legend"><span class="key"><i style="background:var(--pos)"></i>Recebido</span><span class="key"><i style="background:var(--neg)"></i>Falta receber</span></div>
-        <p class="note" id="selInfo"></p>
-        <div class="fig"><svg id="cMeus" role="img" aria-label="Sua parte por mês"></svg></div></div>
-      <div class="card"><h2>Suas clínicas</h2><p class="note">Toque para ver os resultados da clínica.</p>
-        ${clinicas.length ? clinicas.map(o => { const e = S.ext.filter(r => r.clinica_id === o.id), rc = sum(e, r => r.pago), sd = sum(e, r => Math.max(0, r.saldo));
-          return `<a class="clin" href="#clinica-${o.id}" style="text-decoration:none"><div class="row1"><span class="nm">${esc(o.nome)}</span><span class="${sd > 0.009 ? "bad" : sum(e, r => r.devido) > 0.009 ? "good" : "mut"}" style="font-weight:800;white-space:nowrap">${sd > 0.009 ? "falta " + brlK(sd) : sum(e, r => r.devido) > 0.009 ? "em dia" : "sem lucro ainda"}</span></div>
-          <div class="meta">${esc(descPart(o))}</div>
-          <div class="meta">${o.inv ? `Investido ${brlK(o.inv)} · ` : ""}recebido ${brlK(rc)}${o.inv ? ` (${pct(rc / o.inv)})` : ""}</div>
-          ${o.inv ? `<div class="meter"><i style="width:${Math.min(100, rc / o.inv * 100).toFixed(1)}%"></i></div>` : ""}</a>`; }).join("") : `<p class="empty">Nenhuma participação cadastrada ainda.</p>`}
-      </div>
-    </div>`);
-  const info = i => { const m = meses[i]; document.getElementById("selInfo").textContent = m ? `${mlong(m.c)}: gerado ${brl(m.devido)}, recebido ${brl(m.pago)}${m.saldo > 0.009 ? `, falta ${brl(m.saldo)}` : ""}` : "Ainda não há meses com resultado."; };
-  info(sel);
-  chart("cMeus", s => barsStack(s, meses.map(m => ml(m.c)), meses.map(m => Math.min(m.pago, Math.max(m.devido, m.pago))), meses.map(m => Math.max(0, m.saldo)), i => { S.mes.inicio = i; info(i); chart("cMeus", s2 => barsStack(s2, meses.map(m => ml(m.c)), meses.map(m => Math.min(m.pago, Math.max(m.devido, m.pago))), meses.map(m => Math.max(0, m.saldo)), null, i)); }, sel));
-  void ano;
+    <div class="card" style="margin-top:14px">
+      <form class="filtros" id="fil" aria-label="Filtros">
+        <div class="f"><label class="lb" for="fc">Clínica</label><select id="fc" name="cid">${opt("", "Todas", F.cid)}${clinIds.map(id => opt(id, (S.clins.find(c => c.id === id) || {}).nome || id, F.cid)).join("")}</select></div>
+        <div class="f"><label class="lb" for="fde">De</label><select id="fde" name="de">${opt("", "Início", F.de)}${meses.map(m => opt(m.slice(0, 7), ml(m), F.de)).join("")}</select></div>
+        <div class="f"><label class="lb" for="fate">Até</label><select id="fate" name="ate">${opt("", "Mais recente", F.ate)}${meses.map(m => opt(m.slice(0, 7), ml(m), F.ate)).join("")}</select></div>
+        <div class="f"><label class="lb" for="fst">Situação</label><select id="fst" name="st">${opt("", "Todas", F.st)}${opt("pend", "Falta receber", F.st)}${opt("pago", "Pagos", F.st)}${opt("sem", "Sem lucro", F.st)}</select></div>
+        <div class="f"><label class="lb" for="ford">Ordem</label><select id="ford" name="ord">${opt("desc", "Mais recente primeiro", F.ord)}${opt("asc", "Mais antigo primeiro", F.ord)}</select></div>
+        ${filtrado ? `<div class="f" style="align-self:end"><button type="button" class="btn" id="limpar">Limpar filtros</button></div>` : ""}
+      </form>
+      <p class="note" style="margin:6px 0 10px">${rows.length} ${rows.length === 1 ? "linha" : "linhas"} · toque no nome da clínica para ver os gráficos dela.</p>
+      <div class="tbl"><table class="grade">
+        <thead><tr><th>Mês</th><th>Clínica</th><th>Inícios</th><th>Faturamento</th><th>Despesas</th><th>Resultado</th><th>Lucro distribuído</th><th>Sua parte</th><th>Recebido</th><th>Situação</th></tr></thead>
+        <tbody>${rows.map(r => `<tr class="${r.saldo > 0.009 ? "pend" : ""}">
+          <td data-l="Mês"><b>${ml(r.c)}</b></td><td data-l="Clínica"><a href="#clinica-${r.cid}">${esc(r.clinica)}</a></td>
+          <td data-l="Inícios">${r.ini ?? "—"}</td><td data-l="Faturamento">${brl0(r.fat)}</td><td data-l="Despesas">${brl0(r.desp)}</td>
+          <td data-l="Resultado" class="${r.res < 0 ? "bad" : ""}">${r.res == null ? "—" : brl0(r.res)}</td><td data-l="Lucro distribuído">${brl0(r.lucro)}</td>
+          <td data-l="Sua parte"><b>${brl0(r.dev)}</b></td><td data-l="Recebido">${brl0(r.pago)}</td><td data-l="Situação">${stTag(r)}</td></tr>`).join("") || `<tr><td colspan="10" class="empty">Nada encontrado com esses filtros.</td></tr>`}</tbody>
+        ${rows.length > 1 ? `<tfoot><tr><td data-l="">Total</td><td data-l=""></td><td data-l="Inícios">${tot.ini}</td><td data-l="Faturamento">${brl0(tot.fat)}</td><td data-l="Despesas">${brl0(tot.desp)}</td><td data-l="Resultado" class="${tot.res < 0 ? "bad" : ""}">${brl0(tot.res)}</td><td data-l="Lucro distribuído">${brl0(tot.lucro)}</td><td data-l="Sua parte">${brl0(dev)}</td><td data-l="Recebido">${brl0(rec)}</td><td data-l="Falta receber" class="${aRec > 0.009 ? "bad" : ""}">${aRec > 0.009 ? brl0(aRec) : "—"}</td></tr></tfoot>` : ""}
+      </table></div>
+    </div>`, true);
+  const f = document.getElementById("fil");
+  f.onchange = () => { const d = Object.fromEntries(new FormData(f)); if (d.de && d.ate && d.de > d.ate) [d.de, d.ate] = [d.ate, d.de]; S.filtro = d; viewInicio(); };
+  const lp = document.getElementById("limpar"); if (lp) lp.onclick = () => { S.filtro = { cid: "", de: "", ate: "", st: "", ord: F.ord }; viewInicio(); };
 }
 
 /* ---------- Clínica ---------- */

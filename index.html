@@ -82,6 +82,31 @@ table{border-collapse:collapse;width:100%;font-size:14px}
 th,td{padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 th:first-child,td:first-child{text-align:left}
 th{font-weight:600;color:var(--mut)}
+.filtros{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px}
+@media(min-width:900px){.filtros{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.filtros .f{margin-bottom:8px}
+table.grade td a{color:var(--ink);font-weight:600}
+table.grade th:nth-child(2),table.grade td:nth-child(2){text-align:left}
+.wrap.largo{max-width:1280px}
+table.grade tbody tr.pend td:first-child{box-shadow:inset 3px 0 0 var(--neg)}
+table.grade tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var(--ink)}
+@media(max-width:760px){
+ .tbl{overflow:visible}
+ table.grade thead{display:none}
+ table.grade,table.grade tbody,table.grade tfoot{display:block}
+ table.grade tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 10px;padding:12px 0 12px 12px;border-bottom:1px solid var(--line)}
+ table.grade tbody tr.pend{box-shadow:inset 3px 0 0 var(--neg)}
+ table.grade tbody tr.pend td:first-child{box-shadow:none}
+ table.grade td{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:0;padding:3px 0;white-space:normal;font-size:14px}
+ table.grade td::before{content:attr(data-l);font-size:12px;color:var(--mut);font-weight:500}
+ table.grade td[data-l=""]::before,table.grade td[data-l="Mês"]::before,table.grade td[data-l="Clínica"]::before{content:none}
+ table.grade td[data-l="Mês"],table.grade td[data-l="Clínica"]{font-size:16px}
+ table.grade td[data-l="Clínica"]{grid-column:span 2}
+ table.grade td[data-l="Situação"],table.grade td[data-l="Falta receber"]{grid-column:span 2}
+ table.grade tfoot tr{border-top:2px solid var(--ink);border-bottom:0}
+ table.grade tfoot td{border:0}
+ table.grade td.empty{grid-column:1/-1;align-items:center}
+}
 nav.bottom{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);z-index:5}
 nav.bottom a{flex:1;max-width:160px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;min-height:58px;color:var(--mut);text-decoration:none;font-size:12px;font-weight:600}
 nav.bottom a svg{width:24px;height:24px}

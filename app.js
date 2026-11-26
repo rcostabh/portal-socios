@@ -27,6 +27,7 @@ const toast = t => { const e = document.getElementById("toast"); e.textContent =
 const safeName = n => norm(n).replace(/[^a-z0-9.\-]+/g, "-").slice(-80) || "arquivo";
 const TIPOS = { contrato_social: "Contrato social", cnpj: "Cartão CNPJ", alvara: "Alvará", outro: "Outro documento" };
 const ico = {
+  refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/>',
   cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/>',
   home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>',
@@ -702,7 +703,8 @@ async function viewMes() {
   cl.filter(x => (!selId || x.id === selId) && x.c.metaDesp != null && x.c.despReal != null && x.c.metaDesp < x.c.despReal * 0.6).forEach(x => avisos.push(`${x.nome}: a previsão de despesas do mês (${brl0(x.c.metaDesp)}) parece incompleta perto do que já foi pago (${brl0(x.c.despReal)}); a projeção usa o valor pago.`));
   if (cl.some(x => (!selId || x.id === selId) && x.c.venda == null)) avisos.push("Venda do mês ainda não chegou do painel Dashboards Orthopride.");
   frame("mes", `
-    <div class="scroll" style="margin-top:8px">${D.comps.slice(0, 12).map(x => `<button class="chip" data-comp="${x}" aria-pressed="${x === comp}">${ml(x)}</button>`).join("")}</div>
+    <div class="mes-top"><div class="scroll">${D.comps.slice(0, 12).map(x => `<button class="chip" data-comp="${x}" aria-pressed="${x === comp}">${ml(x)}</button>`).join("")}</div>
+      <div class="mes-upd"><button class="btn small" id="btnAtualizar" type="button">${svg("refresh")}Atualizar</button><small class="mut" id="updInfo">${(() => { const o = cl.map(x => x.m.orto_importado_em).filter(Boolean).sort().pop(); return o ? `Painel: ${new Date(o).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : ""; })()}</small></div></div>
     <h1>${c.projFat != null ? (!sel && c.parcial && pf != null ? `${mesNome}: clínicas com meta projetam ${pct(pf, 0)} da meta` : `${mesNome}: projeção de ${brlK(c.projFat)}${pf != null ? `, ${pct(pf, 0)} da meta` : ""}`) : `${mesNome}: ${brlK(c.real)} até agora`}</h1>
     <p class="sub">${esc(nome)} · ${c.ult ? `lançado até ${dt(c.ult)} · ${c.passados} de ${c.total} dias úteis, faltam ${c.faltam}` : "sem lançamentos ainda"}</p>
     ${cl.length > 1 ? `<div class="scroll" id="mesCl"><button class="chip" data-cl="0" aria-pressed="${!selId}">Todas</button>${cl.map(x => `<button class="chip" data-cl="${x.id}" aria-pressed="${x.id === selId}">${esc(x.nome)}</button>`).join("")}</div>` : ""}
@@ -757,6 +759,19 @@ function barsDia(s, vals, ref, ult) {
     (ref ? `<line x1="0" x2="${W}" y1="${y(ref)}" y2="${y(ref)}" stroke="var(--neg)" stroke-dasharray="5 4"/><text x="${W - 4}" y="${y(ref) - 5}" text-anchor="end" font-size="12" fill="var(--neg)" font-weight="600">${esc(brlK(ref))}/dia</text>` : "");
 }
 function bindMes() {
+  const bu = document.getElementById("btnAtualizar");
+  if (bu) bu.onclick = async () => {
+    const antes = document.getElementById("updInfo").textContent;
+    bu.disabled = true; bu.classList.add("girando"); bu.lastChild.textContent = "Buscando…";
+    try {
+      const { data, error } = await sb.functions.invoke("soc-sync-orto", { body: {} });
+      if (error) { let m = "Não consegui buscar agora."; try { m = (await error.context.json()).erro || m; } catch (_) {} throw new Error(m); }
+      if (!data?.ok) throw new Error(data?.erro || "O painel não devolveu dados.");
+      await viewMes();
+      const depois = (document.getElementById("updInfo") || {}).textContent || "";
+      toast(depois && depois === antes ? `Sem novidade: a última importação do painel continua sendo ${depois.replace("Painel: ", "")}.` : "Dados atualizados com o painel.");
+    } catch (x) { toast(x.message); bu.disabled = false; bu.classList.remove("girando"); bu.lastChild.textContent = "Atualizar"; }
+  };
   document.querySelectorAll("[data-comp]").forEach(b => b.onclick = () => { S.mesComp = b.dataset.comp; viewMes(); });
   document.querySelectorAll("[data-cl]").forEach(b => b.onclick = e => { e.preventDefault(); S.mesClin = +b.dataset.cl; viewMes(); });
 }

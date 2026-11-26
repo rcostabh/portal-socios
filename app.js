@@ -608,14 +608,17 @@ function admClinicas(el) {
 const hojeComp = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; };
 async function loadMes(comp) {
   const fim = new Date(Date.UTC(+comp.slice(0, 4), +comp.slice(5, 7), 1)).toISOString().slice(0, 10);
-  const [metas, dias, comps] = await Promise.all([
+  const ant = new Date(Date.UTC(+comp.slice(0, 4), +comp.slice(5, 7) - 2, 1)).toISOString().slice(0, 10);
+  const [metas, dias, comps, metasAnt, diasAnt] = await Promise.all([
     q(sb.from("soc_mes").select("*").eq("competencia", comp)),
     q(sb.from("soc_mes_dias").select("clinica_id,data,recebido,venda,cobranca").gte("data", comp).lt("data", fim).order("data")),
-    q(sb.from("soc_mes").select("competencia").order("competencia", { ascending: false }))
+    q(sb.from("soc_mes").select("competencia").order("competencia", { ascending: false })),
+    q(sb.from("soc_mes").select("clinica_id,cobranca_realizada,venda_realizada").eq("competencia", ant)),
+    q(sb.from("soc_mes_dias").select("clinica_id,data,cobranca,venda").gte("data", ant).lt("data", comp))
   ]);
-  return { comp, metas, dias, comps: [...new Set(comps.map(c => c.competencia))] };
+  return { comp, metas, dias, metasAnt, diasAnt, comps: [...new Set(comps.map(c => c.competencia))] };
 }
-function calcMes(m, dias, comp) {
+function calcMes(m, dias, comp, ant) {
   const du = Caixa.diasUteis(comp), total = m.dias_uteis_total || du.length;
   const real = dias.reduce((t, d) => t + +d.recebido, 0), ult = dias.filter(d => +d.recebido > 0).map(d => d.data).pop() || null;
   let passados = ult ? du.filter(d => d <= ult).length : 0;
@@ -630,14 +633,23 @@ function calcMes(m, dias, comp) {
   }
   const faltam = Math.max(0, total - passados);
   const proj = (v, hoje) => v == null || !passados ? null : (v - hoje) / passados * total;
-  const projVenda = proj(venda, hojeV), projCob = proj(cob, hojeC);
-  const projFat = projVenda != null && projCob != null ? projVenda + projCob : proj(real, hojeR);
   const metaCob0 = m.meta_cobranca == null ? null : +m.meta_cobranca;
   const metaVenda = m.meta_venda != null ? +m.meta_venda : metaFat != null && metaCob0 != null ? metaFat - metaCob0 : null;
   const metaCob = metaCob0 != null ? metaCob0 : metaFat != null && metaVenda != null ? metaFat - metaVenda : null;
+  // Venda: média por dia útil × dias úteis do mês (como no painel). Cobrança: não segue média diária (concentra nos vencimentos);
+  // a projeção usa a meta (cenário 100%) e mostra também o ritmo do mês anterior: total do mês passado + diferença no mesmo período.
+  const projVenda = proj(venda, hojeV);
+  let cobRitmo = null, difCob = null;
+  if (ant && ant.cobTotal != null && cob != null && ult) {
+    const dia = +ult.slice(8), ateDia = ant.dias.filter(d => +d.data.slice(8) <= dia).reduce((s, d) => s + (+d.cobranca || 0), 0);
+    difCob = cob - ateDia; cobRitmo = ant.cobTotal + difCob;
+  }
+  const projCob = metaCob != null ? Math.max(metaCob, cob || 0) : cobRitmo != null ? cobRitmo : proj(cob, hojeC);
+  const projFat = projVenda != null && projCob != null ? projVenda + projCob : proj(real, hojeR);
   const metaDesp = m.meta_despesa == null ? null : +m.meta_despesa, despReal = m.despesa_real == null ? null : +m.despesa_real;
   const despProj = metaDesp == null && despReal == null ? null : Math.max(metaDesp || 0, despReal || 0);
-  return { total, passados, faltam, ult, real, projFat, metaFat, metaVenda, venda, projVenda, metaCob, cob, projCob,
+  return { total, passados, faltam, ult, real, projFat, metaFat, metaVenda, venda, projVenda, metaCob, cob, projCob, cobRitmo, difCob,
+    projFatRitmo: projVenda != null && cobRitmo != null ? projVenda + cobRitmo : null,
     metaDesp, despReal, despProj, resPrev: metaFat != null && metaDesp != null ? metaFat - metaDesp : null,
     resProj: projFat != null && despProj != null ? projFat - despProj : null,
     precisaDia: metaFat != null && faltam ? Math.max(0, metaFat - real) / faltam : null, mediaDia: passados ? (real - hojeR) / passados : null };
@@ -646,7 +658,7 @@ function somaCalc(cs) {
   const nn = (k, f = () => true) => { const v = cs.filter(f).map(c => c[k]).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
   const todos = k => cs.some(c => c[k] == null) ? null : cs.reduce((t, c) => t + c[k], 0);
   const o = {}; for (const k of ["real", "projFat", "metaFat", "metaDesp", "despReal", "despProj", "resProj", "precisaDia", "mediaDia"]) o[k] = nn(k);
-  for (const k of ["metaVenda", "venda", "projVenda", "metaCob", "cob", "projCob"]) o[k] = todos(k);
+  for (const k of ["metaVenda", "venda", "projVenda", "metaCob", "cob", "projCob", "cobRitmo", "difCob", "projFatRitmo"]) o[k] = todos(k);
   const comMeta = c => c.metaFat != null; o.projFatMeta = nn("projFat", comMeta); o.realMeta = nn("real", comMeta); o.resPrev = nn("resPrev");
   o.parcial = cs.some(c => c.metaFat == null);
   o.total = Math.max(...cs.map(c => c.total)); o.passados = Math.max(...cs.map(c => c.passados)); o.faltam = Math.min(...cs.map(c => c.faltam));
@@ -661,7 +673,8 @@ async function viewMes() {
     if (!D.metas.length && D.comps.length && !S.mesComp) { S.mesComp = D.comps[0]; D = await loadMes(S.mesComp); }
   } catch (x) { frame("mes", `<h1>Mês atual</h1><p class="sub">${esc(x.message)}</p>`, true); return; }
   const comp = D.comp, nomeC = id => (S.clins.find(c => c.id === id) || {}).nome || `Clínica ${id}`;
-  const cl = D.metas.map(m => ({ id: m.clinica_id, nome: nomeC(m.clinica_id), m, c: calcMes(m, D.dias.filter(d => d.clinica_id === m.clinica_id), comp), dias: D.dias.filter(d => d.clinica_id === m.clinica_id) })).sort((a, b) => a.nome.localeCompare(b.nome));
+  const antDe = id => { const a = D.metasAnt.find(x => x.clinica_id === id); return a && a.cobranca_realizada != null ? { cobTotal: +a.cobranca_realizada, dias: D.diasAnt.filter(d => d.clinica_id === id) } : null; };
+  const cl = D.metas.map(m => ({ id: m.clinica_id, nome: nomeC(m.clinica_id), m, c: calcMes(m, D.dias.filter(d => d.clinica_id === m.clinica_id), comp, antDe(m.clinica_id)), dias: D.dias.filter(d => d.clinica_id === m.clinica_id) })).sort((a, b) => a.nome.localeCompare(b.nome));
   if (!cl.length) { frame("mes", `<h1>${esc(mlong(comp))}</h1><p class="sub">A gestão ainda não carregou os números deste mês.</p>${D.comps.length ? `<div class="scroll">${D.comps.map(c => `<button class="chip" data-comp="${c}">${ml(c)}</button>`).join("")}</div>` : ""}`, true); bindMes(); return; }
   const selId = cl.some(x => x.id === S.mesClin) ? S.mesClin : (cl.length === 1 ? cl[0].id : 0);
   const sel = selId ? cl.find(x => x.id === selId) : null;
@@ -689,9 +702,10 @@ async function viewMes() {
     <div class="grid two">
       <div class="card"><h2>Faturamento diário</h2><p class="note">Venda + cobrança de cada dia${sel ? "" : ", somando as clínicas"}. A linha tracejada é a média por dia útil que bate a meta.</p>
         <div class="fig"><svg id="cDia" role="img" aria-label="Faturamento diário"></svg></div></div>
-      <div class="card"><h2>Venda, cobrança e total</h2><p class="note">Venda e cobrança vêm do painel Dashboards Orthopride. Projeção = média por dia útil × dias úteis do mês (segunda a sábado, sem feriados).</p>
+      <div class="card"><h2>Venda, cobrança e total</h2><p class="note">Dados do painel Dashboards Orthopride. Venda: média por dia útil × dias úteis do mês. Cobrança: projetada pela meta (100%), com o ritmo do mês passado abaixo.</p>
         <div class="tbl"><table><thead><tr><th></th><th>Meta</th><th>Até agora</th><th>Projeção</th><th>% meta</th></tr></thead><tbody>
-          ${linhaVC("Venda", c.metaVenda, c.venda, c.projVenda)}${linhaVC("Cobrança", c.metaCob, c.cob, c.projCob)}${linhaVC("<b>Valor total</b>", c.metaFat, c.real, c.projFat)}
+          ${linhaVC("Venda", c.metaVenda, c.venda, c.projVenda)}${linhaVC("Cobrança <small class=\"mut\">(se bater 100%)</small>", c.metaCob, c.cob, c.projCob)}${linhaVC("<b>Valor total</b>", c.metaFat, c.real, c.projFat)}
+          ${c.cobRitmo != null ? `<tr><td colspan="5" style="white-space:normal;text-align:left;padding-top:12px"><span class="${c.difCob < 0 ? "bad" : "good"}" style="font-weight:700">Cobrança ${c.difCob < 0 ? "abaixo" : "acima"} do mês passado: ${brl0(Math.abs(c.difCob))}</span> no mesmo período. Nesse ritmo, a cobrança fecha em ${brl0(c.cobRitmo)} e o total em ${brl0(c.projFatRitmo)}${c.metaFat ? ` (${pct(c.projFatRitmo / c.metaFat, 1)} da meta)` : ""}.</td></tr>` : ""}
         </tbody></table></div></div>
       <div class="card span"><h2>Meta inicial × projeção</h2><p class="note">A despesa projetada é a prevista no início do mês (aba Previsão de Despesas) ou a já paga, se for maior.</p>
         <div class="tbl"><table><thead><tr><th></th><th>Meta inicial</th><th>Projeção</th><th>Diferença</th></tr></thead><tbody>

@@ -610,7 +610,7 @@ async function loadMes(comp) {
   const fim = new Date(Date.UTC(+comp.slice(0, 4), +comp.slice(5, 7), 1)).toISOString().slice(0, 10);
   const [metas, dias, comps] = await Promise.all([
     q(sb.from("soc_mes").select("*").eq("competencia", comp)),
-    q(sb.from("soc_mes_dias").select("clinica_id,data,recebido").gte("data", comp).lt("data", fim).order("data")),
+    q(sb.from("soc_mes_dias").select("clinica_id,data,recebido,venda,cobranca").gte("data", comp).lt("data", fim).order("data")),
     q(sb.from("soc_mes").select("competencia").order("competencia", { ascending: false }))
   ]);
   return { comp, metas, dias, comps: [...new Set(comps.map(c => c.competencia))] };
@@ -618,19 +618,29 @@ async function loadMes(comp) {
 function calcMes(m, dias, comp) {
   const du = Caixa.diasUteis(comp), total = m.dias_uteis_total || du.length;
   const real = dias.reduce((t, d) => t + +d.recebido, 0), ult = dias.filter(d => +d.recebido > 0).map(d => d.data).pop() || null;
-  const passados = ult ? du.filter(d => d <= ult).length : 0, faltam = Math.max(0, total - passados);
-  const proj = v => v == null || !passados ? null : v / passados * total;
-  const metaFat = m.meta_faturamento == null ? null : +m.meta_faturamento, metaVenda = m.meta_venda == null ? null : +m.meta_venda;
+  let passados = ult ? du.filter(d => d <= ult).length : 0;
+  const metaFat = m.meta_faturamento == null ? null : +m.meta_faturamento;
   const venda = m.venda_realizada == null ? null : +m.venda_realizada;
-  const metaCob = m.meta_cobranca != null ? +m.meta_cobranca : metaFat != null && metaVenda != null ? metaFat - metaVenda : null;
-  const projFat = proj(real), projVenda = proj(venda);
+  const cob = m.cobranca_realizada != null ? +m.cobranca_realizada : venda != null ? real - venda : null;
+  // Mesma regra do painel do Leo: atualização feita antes das 18h deixa o dia de hoje incompleto; a média usa até ontem.
+  let hojeR = 0, hojeV = 0, hojeC = 0;
+  if (m.orto_importado_em && ult) {
+    const imp = new Date(m.orto_importado_em), dImp = imp.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }), hImp = +imp.toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
+    if (ult === dImp && hImp < 18 && du.includes(ult) && passados > 1) { const d = dias.find(x => x.data === ult) || {}; hojeR = +d.recebido || 0; hojeV = +d.venda || 0; hojeC = +d.cobranca || 0; passados -= 1; }
+  }
+  const faltam = Math.max(0, total - passados);
+  const proj = (v, hoje) => v == null || !passados ? null : (v - hoje) / passados * total;
+  const projVenda = proj(venda, hojeV), projCob = proj(cob, hojeC);
+  const projFat = projVenda != null && projCob != null ? projVenda + projCob : proj(real, hojeR);
+  const metaCob0 = m.meta_cobranca == null ? null : +m.meta_cobranca;
+  const metaVenda = m.meta_venda != null ? +m.meta_venda : metaFat != null && metaCob0 != null ? metaFat - metaCob0 : null;
+  const metaCob = metaCob0 != null ? metaCob0 : metaFat != null && metaVenda != null ? metaFat - metaVenda : null;
   const metaDesp = m.meta_despesa == null ? null : +m.meta_despesa, despReal = m.despesa_real == null ? null : +m.despesa_real;
   const despProj = metaDesp == null && despReal == null ? null : Math.max(metaDesp || 0, despReal || 0);
-  return { total, passados, faltam, ult, real, projFat, metaFat, metaVenda, venda, projVenda, metaCob,
-    cob: venda == null ? null : real - venda, projCob: projFat != null && projVenda != null ? projFat - projVenda : null,
+  return { total, passados, faltam, ult, real, projFat, metaFat, metaVenda, venda, projVenda, metaCob, cob, projCob,
     metaDesp, despReal, despProj, resPrev: metaFat != null && metaDesp != null ? metaFat - metaDesp : null,
     resProj: projFat != null && despProj != null ? projFat - despProj : null,
-    precisaDia: metaFat != null && faltam ? Math.max(0, metaFat - real) / faltam : null, mediaDia: passados ? real / passados : null };
+    precisaDia: metaFat != null && faltam ? Math.max(0, metaFat - real) / faltam : null, mediaDia: passados ? (real - hojeR) / passados : null };
 }
 function somaCalc(cs) {
   const nn = (k, f = () => true) => { const v = cs.filter(f).map(c => c[k]).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
@@ -660,10 +670,10 @@ async function viewMes() {
   const pf = sel ? pm(c.projFat, c.metaFat) : pm(c.projFatMeta, c.metaFat), bate = pf != null && pf >= 1;
   const mesNome = MESL[+comp.slice(5, 7) - 1];
   const pctTag = p => p == null ? "" : `<span class="d ${p >= 1 ? "good" : "bad"}">${pct(p, 0)} da meta</span>`;
-  const linhaVC = (rot, meta, real, proj) => `<tr><td>${rot}</td><td>${brl0(meta)}</td><td>${brl0(real)}</td><td>${brl0(proj)}</td><td>${pm(proj, meta) == null ? "—" : `<span class="${pm(proj, meta) >= 1 ? "good" : "bad"}" style="font-weight:700">${pct(pm(proj, meta), 0)}</span>`}</td></tr>`;
+  const linhaVC = (rot, meta, real, proj) => `<tr><td>${rot}</td><td>${brl0(meta)}</td><td>${brl0(real)}</td><td>${brl0(proj)}</td><td>${pm(proj, meta) == null ? "—" : `<span class="${pm(proj, meta) >= 1 ? "good" : "bad"}" style="font-weight:700">${pct(pm(proj, meta), 1)}</span>`}</td></tr>`;
   const avisos = cl.filter(x => (!selId || x.id === selId) && x.c.metaFat == null).map(x => `${x.nome}: meta de faturamento não preenchida na planilha (aba Previsao-Real).`);
   cl.filter(x => (!selId || x.id === selId) && x.c.metaDesp != null && x.c.despReal != null && x.c.metaDesp < x.c.despReal * 0.6).forEach(x => avisos.push(`${x.nome}: a previsão de despesas do mês (${brl0(x.c.metaDesp)}) parece incompleta perto do que já foi pago (${brl0(x.c.despReal)}); a projeção usa o valor pago.`));
-  if (cl.some(x => (!selId || x.id === selId) && x.c.venda == null)) avisos.push("Venda do mês ainda não informada pela gestão: cobrança e projeção de venda aparecem quando ela for lançada.");
+  if (cl.some(x => (!selId || x.id === selId) && x.c.venda == null)) avisos.push("Venda do mês ainda não chegou do painel Dashboards Orthopride.");
   frame("mes", `
     <div class="scroll" style="margin-top:8px">${D.comps.slice(0, 12).map(x => `<button class="chip" data-comp="${x}" aria-pressed="${x === comp}">${ml(x)}</button>`).join("")}</div>
     <h1>${c.projFat != null ? (!sel && c.parcial && pf != null ? `${mesNome}: clínicas com meta projetam ${pct(pf, 0)} da meta` : `${mesNome}: projeção de ${brlK(c.projFat)}${pf != null ? `, ${pct(pf, 0)} da meta` : ""}`) : `${mesNome}: ${brlK(c.real)} até agora`}</h1>
@@ -677,9 +687,9 @@ async function viewMes() {
     </div>
     ${avisos.length ? `<div class="banner">${svg("warn")}<span>${avisos.map(esc).join("<br>")}</span></div>` : ""}
     <div class="grid two">
-      <div class="card"><h2>Faturamento diário</h2><p class="note">Total recebido no caixa em cada dia${sel ? "" : ", somando as clínicas"}. A linha tracejada é a média por dia útil que bate a meta.</p>
+      <div class="card"><h2>Faturamento diário</h2><p class="note">Venda + cobrança de cada dia${sel ? "" : ", somando as clínicas"}. A linha tracejada é a média por dia útil que bate a meta.</p>
         <div class="fig"><svg id="cDia" role="img" aria-label="Faturamento diário"></svg></div></div>
-      <div class="card"><h2>Venda, cobrança e total</h2><p class="note">Cobrança = faturamento − venda. Projeção pelos dias úteis (segunda a sábado, sem feriados).</p>
+      <div class="card"><h2>Venda, cobrança e total</h2><p class="note">Venda e cobrança vêm do painel Dashboards Orthopride. Projeção = média por dia útil × dias úteis do mês (segunda a sábado, sem feriados).</p>
         <div class="tbl"><table><thead><tr><th></th><th>Meta</th><th>Até agora</th><th>Projeção</th><th>% meta</th></tr></thead><tbody>
           ${linhaVC("Venda", c.metaVenda, c.venda, c.projVenda)}${linhaVC("Cobrança", c.metaCob, c.cob, c.projCob)}${linhaVC("<b>Valor total</b>", c.metaFat, c.real, c.projFat)}
         </tbody></table></div></div>
@@ -693,7 +703,7 @@ async function viewMes() {
         ${cl.map(x => `<tr><td data-l="Clínica"><a href="#mes" data-cl="${x.id}">${esc(x.nome)}</a></td><td data-l="Meta">${brl0(x.c.metaFat)}</td><td data-l="Até agora">${brl0(x.c.real)}</td><td data-l="Projeção">${brl0(x.c.projFat)}</td><td data-l="% meta">${pm(x.c.projFat, x.c.metaFat) == null ? "—" : `<span class="${pm(x.c.projFat, x.c.metaFat) >= 1 ? "good" : "bad"}" style="font-weight:700">${pct(pm(x.c.projFat, x.c.metaFat), 0)}</span>`}</td><td data-l="Despesa prevista">${brl0(x.c.metaDesp)}</td><td data-l="Resultado projetado" class="${x.c.resProj < 0 ? "bad" : ""}">${brl0(x.c.resProj)}</td></tr>`).join("")}
       </tbody></table></div></div>` : ""}
     </div>
-    <p class="note" style="margin-top:14px">Atualizado com a planilha de caixa${cl.map(x => x.m.atualizado_em).sort().pop() ? ` em ${new Date(cl.map(x => x.m.atualizado_em).sort().pop()).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}.</p>`, true);
+    <p class="note" style="margin-top:14px">${(() => { const o = cl.map(x => x.m.orto_importado_em).filter(Boolean).sort().pop(); return o ? `Venda e cobrança: painel Dashboards Orthopride, importação de ${new Date(o).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}. Despesas: planilhas de caixa.` : "Dados das planilhas de caixa."; })()}</p>`, true);
   const nDias = new Date(Date.UTC(+comp.slice(0, 4), +comp.slice(5, 7), 0)).getUTCDate();
   const porDia = Array.from({ length: nDias }, (_, i) => { const d = `${comp.slice(0, 8)}${String(i + 1).padStart(2, "0")}`; return (sel ? sel.dias : D.dias).filter(x => x.data === d).reduce((t, x) => t + +x.recebido, 0); });
   const ref = c.metaFat != null && c.total ? c.metaFat / c.total : null;
@@ -725,13 +735,13 @@ async function admMes(el) {
   const D = await loadMes(comp);
   const nomeC = id => (S.clins.find(c => c.id === id) || {}).nome || id;
   el.innerHTML = `<div class="card" style="margin-top:12px"><h2>Subir planilhas de caixa</h2>
-      <p class="note">Escolha um ou mais arquivos de caixa (IPT 2026, GVS 2026, DVL 26, JUA 2026, CAIXA mensal…). O portal lê a aba <b>Fluxo Caixa</b> (faturamento diário) e a <b>Previsao-Real</b> (meta de faturamento e de despesas).</p>
+      <p class="note">Escolha um ou mais arquivos de caixa (IPT 2026, GVS 2026, DVL 26, JUA 2026, CAIXA mensal…). O portal lê a aba <b>Previsao-Real</b> (meta e realizado de despesas). Venda, cobrança e faturamento diário chegam sozinhos do painel Dashboards Orthopride; o caixa só preenche o faturamento se o painel não tiver o mês.</p>
       <label class="btn solid" for="cxf">${svg("doc")}Escolher arquivos</label><input id="cxf" type="file" accept=".xlsx,.xls" multiple style="position:absolute;width:1px;height:1px;opacity:0"><div id="cxPrev"></div></div>
     <div class="card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2>${esc(mlong(comp))}</h2>
       <div class="f" style="margin:0"><label class="lb" for="amc" style="font-weight:500">Mês</label><input id="amc" type="month" value="${comp.slice(0, 7)}"></div></div>
       ${D.metas.length ? D.metas.map(m => { const c = calcMes(m, D.dias.filter(d => d.clinica_id === m.clinica_id), comp);
         return `<div class="li" style="flex-wrap:wrap"><div class="t"><b>${esc(nomeC(m.clinica_id))}</b><small>Meta ${brl0(c.metaFat)} · até ${c.ult ? dt(c.ult) : "—"}: ${brl0(c.real)} · projeção ${brl0(c.projFat)} · despesa prevista ${brl0(c.metaDesp)}</small>
-          <small>Venda: meta ${brl0(c.metaVenda)} · realizada ${c.venda == null ? `<span class="bad">não informada</span>` : brl0(c.venda)}</small></div>
+          <small>Venda: meta ${brl0(c.metaVenda)} · realizada ${c.venda == null ? `<span class="bad">não informada</span>` : brl0(c.venda)} · Cobrança: meta ${brl0(c.metaCob)} · realizada ${brl0(c.cob)}${m.orto_importado_em ? ` · painel ${new Date(m.orto_importado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}</small></div>
           <div class="r"><button class="btn small" data-edm="${m.clinica_id}">Editar metas e venda</button></div></div>`; }).join("") : `<p class="empty">Nenhuma clínica carregada neste mês.</p>`}</div>`;
   el.querySelector("#amc").onchange = e => { if (e.target.value) { S.admMesComp = e.target.value + "-01"; admMes(el); } };
   el.onclick = e => { const b = e.target.closest("[data-edm]"); if (b) formMetas(D.metas.find(m => m.clinica_id === +b.dataset.edm), comp, () => admMes(el)); };
@@ -755,8 +765,11 @@ async function admMes(el) {
         for (const s of pv.querySelectorAll("[data-cxi]")) {
           const cid = +s.value, l = lidos[+s.dataset.cxi]; if (!cid || !l.r) continue;
           const mm = l.r.meses[m0] || {}, dd = l.r.dias.filter(d => d.data.startsWith(m0.slice(0, 7)));
-          await q(sb.from("soc_mes").upsert({ clinica_id: cid, competencia: m0, meta_faturamento: mm.fat_prev || null, meta_despesa: mm.desp_prev ?? null, despesa_real: mm.desp_real ?? null, fonte: l.f.name, atualizado_em: new Date().toISOString() }, { onConflict: "clinica_id,competencia" }));
-          if (dd.length) await q(sb.from("soc_mes_dias").upsert(dd.map(d => ({ clinica_id: cid, data: d.data, recebido: d.recebido })), { onConflict: "clinica_id,data" }));
+          const atual = D.metas.find(x => x.clinica_id === cid), temPainel = !!(atual && atual.orto_importado_em);
+          const row = { clinica_id: cid, competencia: m0, meta_despesa: mm.desp_prev ?? null, despesa_real: mm.desp_real ?? null, atualizado_em: new Date().toISOString() };
+          if (!temPainel || atual.meta_faturamento == null) row.meta_faturamento = mm.fat_prev || null;
+          await q(sb.from("soc_mes").upsert(row, { onConflict: "clinica_id,competencia" }));
+          if (dd.length && !temPainel) await q(sb.from("soc_mes_dias").upsert(dd.map(d => ({ clinica_id: cid, data: d.data, recebido: d.recebido })), { onConflict: "clinica_id,data" }));
           if (pv.querySelector("#cxRes").checked) {
             const ups = Object.entries(l.r.meses).filter(([k, v]) => k < m0 && v.fat_caixa > 0).map(([k, v]) => ({ clinica_id: cid, competencia: k, faturamento: v.fat_caixa, ...(v.desp_real ? { despesas: Math.round(v.desp_real * 100) / 100 } : {}), atualizado_em: new Date().toISOString() }));
             for (const u of ups) await q(sb.from("soc_resultados").upsert(u, { onConflict: "clinica_id,competencia" }));

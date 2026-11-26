@@ -665,13 +665,14 @@ function calcMes(m, dias, comp, ant) {
     projFatRitmo: projVenda != null && cobRitmo != null ? projVenda + cobRitmo : null,
     metaDesp, despReal, despProj, resPrev: metaFat != null && metaDesp != null ? metaFat - metaDesp : null,
     resProj: projFat != null && despProj != null ? projFat - despProj : null,
-    precisaDia: metaFat != null && faltam ? Math.max(0, metaFat - real) / faltam : null, mediaDia: passados ? (real - hojeR) / passados : null };
+    precisaDia: metaFat != null && faltam ? Math.max(0, metaFat - real) / faltam : null, mediaDia: passados ? (real - hojeR) / passados : null,
+    mediaVenda: venda != null && passados ? (venda - hojeV) / passados : null, precisaVenda: metaVenda != null && venda != null && faltam ? Math.max(0, metaVenda - venda) / faltam : null };
 }
 function somaCalc(cs) {
   const nn = (k, f = () => true) => { const v = cs.filter(f).map(c => c[k]).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
   const todos = k => cs.some(c => c[k] == null) ? null : cs.reduce((t, c) => t + c[k], 0);
   const o = {}; for (const k of ["real", "projFat", "metaFat", "metaDesp", "despReal", "despProj", "resProj", "precisaDia", "mediaDia"]) o[k] = nn(k);
-  for (const k of ["metaVenda", "venda", "projVenda", "metaCob", "cob", "projCob", "cobRitmo", "difCob", "projFatRitmo"]) o[k] = todos(k);
+  for (const k of ["metaVenda", "venda", "projVenda", "metaCob", "cob", "projCob", "cobRitmo", "difCob", "projFatRitmo", "mediaVenda", "precisaVenda"]) o[k] = todos(k);
   const comMeta = c => c.metaFat != null; o.projFatMeta = nn("projFat", comMeta); o.realMeta = nn("real", comMeta); o.resPrev = nn("resPrev");
   o.parcial = cs.some(c => c.metaFat == null);
   o.total = Math.max(...cs.map(c => c.total)); o.passados = Math.max(...cs.map(c => c.passados)); o.faltam = Math.min(...cs.map(c => c.faltam));
@@ -709,7 +710,7 @@ async function viewMes() {
       <div class="kpi"><div class="l">Meta de faturamento</div><div class="v">${brlK(c.metaFat)}</div><span class="d mut">${c.parcial ? "só clínicas com meta" : "definida no início do mês"}</span></div>
       <div class="kpi"><div class="l">Faturado até agora</div><div class="v">${brlK(c.real)}</div>${pctTag(sel ? pm(c.real, c.metaFat) : pm(c.realMeta, c.metaFat))}</div>
       <div class="kpi ${pf != null && !bate ? "alert" : ""}"><div class="l">Projeção do mês</div><div class="v ${bate ? "good" : ""}">${brlK(c.projFat)}</div>${pctTag(pf)}</div>
-      <div class="kpi"><div class="l">Média por dia útil</div><div class="v">${brlK(c.mediaDia)}</div><span class="d mut">${c.precisaDia != null ? `precisa de ${brlK(c.precisaDia)}/dia` : "—"}</span></div>
+      <div class="kpi"><div class="l">Média de venda por dia útil</div><div class="v">${brlK(c.mediaVenda)}</div><span class="d ${c.mediaVenda != null && c.precisaVenda != null && c.mediaVenda < c.precisaVenda ? "bad" : "mut"}">${c.precisaVenda != null ? (c.precisaVenda > 0 ? `precisa de ${brlK(c.precisaVenda)}/dia para a meta` : "meta de venda batida") : "—"}</span></div>
     </div>
     ${avisos.length ? `<div class="banner">${svg("warn")}<span>${avisos.map(esc).join("<br>")}</span></div>` : ""}
     <div class="grid two">

@@ -43,6 +43,7 @@ h3{font-size:16px;font-weight:800;margin:0}
 .kpi{background:var(--card);border-radius:16px;padding:14px}
 .kpi .l{font-size:14px;color:var(--mut)}
 .kpi .v{font-size:clamp(20px,5.4vw,27px);font-weight:800;white-space:nowrap;line-height:1.2;margin:2px 0}
+.kpi .d{white-space:normal}
 .kpi.alert{background:var(--negbg)}.kpi.alert .v,.kpi.alert .l{color:var(--neg)}
 .d{font-size:13px;font-weight:600;white-space:nowrap}
 .good{color:var(--pos)}.bad{color:var(--neg)}.mut{color:var(--mut)}
@@ -142,8 +143,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--ink);outline:none}
 <div id="app"><div class="spin">Carregando…</div></div>
 <div class="toast" id="toast" role="status"></div>
 <script src="vendor/supabase.js"></script>
-<script src="vendor/xlsx.full.min.js" defer></script>
-<script src="config.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="caixa.js?v=5"></script>
+<script src="config.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

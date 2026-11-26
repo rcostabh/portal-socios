@@ -27,6 +27,7 @@ const toast = t => { const e = document.getElementById("toast"); e.textContent =
 const safeName = n => norm(n).replace(/[^a-z0-9.\-]+/g, "-").slice(-80) || "arquivo";
 const TIPOS = { contrato_social: "Contrato social", cnpj: "Cartão CNPJ", alvara: "Alvará", outro: "Outro documento" };
 const ico = {
+  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2"/>',
   home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>',
   doc: '<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
@@ -158,7 +159,7 @@ async function refresh() { await loadSocio(); if (S.me.admin) await loadAdmin();
 /* ---------- moldura ---------- */
 function frame(active, body, largo = false) {
   charts.clear();
-  const nav = [["inicio", "home", "Início"], ["repasses", "cash", "Repasses"], ["documentos", "doc", "Documentos"]];
+  const nav = [["inicio", "home", "Início"], ["mes", "cal", "Mês atual"], ["repasses", "cash", "Repasses"], ["documentos", "doc", "Documentos"]];
   if (S.me.admin) nav.push(["admin", "gear", "Gestão"]);
   $app.innerHTML = `<div class="wrap${largo ? " largo" : ""}"><div class="top"><div class="who">${esc(S.me.nome)}<small>${esc(S.me.email)}</small></div>
     <button class="btn small" id="sair" aria-label="Sair">${svg("out")}Sair</button></div>${body}</div>
@@ -169,6 +170,7 @@ function route() {
   const h = location.hash.slice(1) || "inicio";
   if (h.startsWith("clinica-")) return viewClinica(+h.slice(8));
   if (h.startsWith("admin")) return S.me.admin ? viewAdmin(h.slice(6) || "repasses") : viewInicio();
+  if (h === "mes") return viewMes();
   if (h === "repasses") return viewRepasses();
   if (h === "documentos") return viewDocs();
   return viewInicio();
@@ -222,6 +224,7 @@ function viewInicio() {
   frame("inicio", `
     <h1>${aRec > 0.009 ? `${esc(first)}, faltam ${brlK(aRec)} para você receber` : `${esc(first)}, seus repasses estão em dia`}</h1>
     <p class="sub">${filtrado ? "Números de acordo com os filtros abaixo." : `Você já recebeu ${brl(rec)}${inv ? `, ${pct(rec / inv)} do que investiu` : ""}.`}</p>
+    <div class="actions" style="margin:0 0 14px"><a class="btn solid" href="#mes">${svg("cal")}Mês atual: metas e projeções</a></div>
     <div class="kpis">
       <div class="kpi"><div class="l">Investido</div><div class="v">${brlK(inv)}</div><span class="d mut">${F.cid ? esc((S.clins.find(c => c.id === +F.cid) || {}).nome || "") : `${clinIds.length} clínica${clinIds.length === 1 ? "" : "s"}`}</span></div>
       <div class="kpi"><div class="l">Recebido</div><div class="v">${brlK(rec)}</div><span class="d mut">de ${brlK(dev)} gerados</span></div>
@@ -357,8 +360,8 @@ const clinOpts = (sel, todas = false) => (todas ? `<option value="">Todas as cl�
 
 /* ---------- Gestão ---------- */
 function viewAdmin(tab) {
-  const tabs = [["repasses", "Repasses"], ["socios", "Sócios"], ["resultados", "Resultados"], ["documentos", "Documentos"], ["clinicas", "Clínicas"]];
-  const body = { repasses: admRepasses, socios: admSocios, resultados: admResultados, documentos: admDocs, clinicas: admClinicas }[tab] || admRepasses;
+  const tabs = [["repasses", "Repasses"], ["mes", "Mês atual"], ["socios", "Sócios"], ["resultados", "Resultados"], ["documentos", "Documentos"], ["clinicas", "Clínicas"]];
+  const body = { repasses: admRepasses, mes: admMes, socios: admSocios, resultados: admResultados, documentos: admDocs, clinicas: admClinicas }[tab] || admRepasses;
   frame("admin", `<h1>Gestão</h1><div class="scroll tabs">${tabs.map(([k, t]) => `<a class="chip" href="#admin-${k}" aria-pressed="${k === tab}" style="display:inline-flex;align-items:center;text-decoration:none">${t}</a>`).join("")}</div><div id="admBody"></div>`);
   body(document.getElementById("admBody"));
 }
@@ -598,6 +601,188 @@ function admClinicas(el) {
     modal(c.nome, `<form id="fc" novalidate><div class="f"><label class="lb" for="cr">Razão social</label><input id="cr" value="${esc(c.razao_social)}"></div><div class="f"><label class="lb" for="cn">CNPJ</label><input id="cn" inputmode="numeric" value="${esc(c.cnpj)}"></div><div class="f"><label class="lb" for="ce">Endereço</label><input id="ce" value="${esc(c.endereco)}"></div><div class="err" id="cee"></div><button class="btn solid" type="submit" style="width:100%">Salvar</button></form>`, (m, close) => {
       m.querySelector("#fc").onsubmit = async ev => { ev.preventDefault(); try { await q(sb.from("soc_clinicas_info").upsert({ clinica_id: c.id, razao_social: m.querySelector("#cr").value.trim() || null, cnpj: m.querySelector("#cn").value.trim() || null, endereco: m.querySelector("#ce").value.trim() || null, atualizado_em: new Date().toISOString() }, { onConflict: "clinica_id" })); close(); toast("Clínica salva"); await refresh(); } catch (x) { m.querySelector("#cee").textContent = x.message; } };
     }); };
+}
+
+
+/* ---------- Mês atual: metas, diário e projeções ---------- */
+const hojeComp = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; };
+async function loadMes(comp) {
+  const fim = new Date(Date.UTC(+comp.slice(0, 4), +comp.slice(5, 7), 1)).toISOString().slice(0, 10);
+  const [metas, dias, comps] = await Promise.all([
+    q(sb.from("soc_mes").select("*").eq("competencia", comp)),
+    q(sb.from("soc_mes_dias").select("clinica_id,data,recebido").gte("data", comp).lt("data", fim).order("data")),
+    q(sb.from("soc_mes").select("competencia").order("competencia", { ascending: false }))
+  ]);
+  return { comp, metas, dias, comps: [...new Set(comps.map(c => c.competencia))] };
+}
+function calcMes(m, dias, comp) {
+  const du = Caixa.diasUteis(comp), total = m.dias_uteis_total || du.length;
+  const real = dias.reduce((t, d) => t + +d.recebido, 0), ult = dias.filter(d => +d.recebido > 0).map(d => d.data).pop() || null;
+  const passados = ult ? du.filter(d => d <= ult).length : 0, faltam = Math.max(0, total - passados);
+  const proj = v => v == null || !passados ? null : v / passados * total;
+  const metaFat = m.meta_faturamento == null ? null : +m.meta_faturamento, metaVenda = m.meta_venda == null ? null : +m.meta_venda;
+  const venda = m.venda_realizada == null ? null : +m.venda_realizada;
+  const metaCob = m.meta_cobranca != null ? +m.meta_cobranca : metaFat != null && metaVenda != null ? metaFat - metaVenda : null;
+  const projFat = proj(real), projVenda = proj(venda);
+  const metaDesp = m.meta_despesa == null ? null : +m.meta_despesa, despReal = m.despesa_real == null ? null : +m.despesa_real;
+  const despProj = metaDesp == null && despReal == null ? null : Math.max(metaDesp || 0, despReal || 0);
+  return { total, passados, faltam, ult, real, projFat, metaFat, metaVenda, venda, projVenda, metaCob,
+    cob: venda == null ? null : real - venda, projCob: projFat != null && projVenda != null ? projFat - projVenda : null,
+    metaDesp, despReal, despProj, resPrev: metaFat != null && metaDesp != null ? metaFat - metaDesp : null,
+    resProj: projFat != null && despProj != null ? projFat - despProj : null,
+    precisaDia: metaFat != null && faltam ? Math.max(0, metaFat - real) / faltam : null, mediaDia: passados ? real / passados : null };
+}
+function somaCalc(cs) {
+  const nn = (k, f = () => true) => { const v = cs.filter(f).map(c => c[k]).filter(x => x != null); return v.length ? v.reduce((t, x) => t + x, 0) : null; };
+  const todos = k => cs.some(c => c[k] == null) ? null : cs.reduce((t, c) => t + c[k], 0);
+  const o = {}; for (const k of ["real", "projFat", "metaFat", "metaDesp", "despReal", "despProj", "resProj", "precisaDia", "mediaDia"]) o[k] = nn(k);
+  for (const k of ["metaVenda", "venda", "projVenda", "metaCob", "cob", "projCob"]) o[k] = todos(k);
+  const comMeta = c => c.metaFat != null; o.projFatMeta = nn("projFat", comMeta); o.realMeta = nn("real", comMeta); o.resPrev = nn("resPrev");
+  o.parcial = cs.some(c => c.metaFat == null);
+  o.total = Math.max(...cs.map(c => c.total)); o.passados = Math.max(...cs.map(c => c.passados)); o.faltam = Math.min(...cs.map(c => c.faltam));
+  o.ult = cs.map(c => c.ult).filter(Boolean).sort().pop() || null; return o;
+}
+const pm = (v, meta) => v == null || !meta ? null : v / meta;
+async function viewMes() {
+  frame("mes", `<div class="spin">Carregando o mês…</div>`, true);
+  let D;
+  try {
+    D = await loadMes(S.mesComp || hojeComp());
+    if (!D.metas.length && D.comps.length && !S.mesComp) { S.mesComp = D.comps[0]; D = await loadMes(S.mesComp); }
+  } catch (x) { frame("mes", `<h1>Mês atual</h1><p class="sub">${esc(x.message)}</p>`, true); return; }
+  const comp = D.comp, nomeC = id => (S.clins.find(c => c.id === id) || {}).nome || `Clínica ${id}`;
+  const cl = D.metas.map(m => ({ id: m.clinica_id, nome: nomeC(m.clinica_id), m, c: calcMes(m, D.dias.filter(d => d.clinica_id === m.clinica_id), comp), dias: D.dias.filter(d => d.clinica_id === m.clinica_id) })).sort((a, b) => a.nome.localeCompare(b.nome));
+  if (!cl.length) { frame("mes", `<h1>${esc(mlong(comp))}</h1><p class="sub">A gestão ainda não carregou os números deste mês.</p>${D.comps.length ? `<div class="scroll">${D.comps.map(c => `<button class="chip" data-comp="${c}">${ml(c)}</button>`).join("")}</div>` : ""}`, true); bindMes(); return; }
+  const selId = cl.some(x => x.id === S.mesClin) ? S.mesClin : (cl.length === 1 ? cl[0].id : 0);
+  const sel = selId ? cl.find(x => x.id === selId) : null;
+  const c = sel ? sel.c : somaCalc(cl.map(x => x.c));
+  const nome = sel ? sel.nome : "Todas as suas clínicas";
+  const pf = sel ? pm(c.projFat, c.metaFat) : pm(c.projFatMeta, c.metaFat), bate = pf != null && pf >= 1;
+  const mesNome = MESL[+comp.slice(5, 7) - 1];
+  const pctTag = p => p == null ? "" : `<span class="d ${p >= 1 ? "good" : "bad"}">${pct(p, 0)} da meta</span>`;
+  const linhaVC = (rot, meta, real, proj) => `<tr><td>${rot}</td><td>${brl0(meta)}</td><td>${brl0(real)}</td><td>${brl0(proj)}</td><td>${pm(proj, meta) == null ? "—" : `<span class="${pm(proj, meta) >= 1 ? "good" : "bad"}" style="font-weight:700">${pct(pm(proj, meta), 0)}</span>`}</td></tr>`;
+  const avisos = cl.filter(x => (!selId || x.id === selId) && x.c.metaFat == null).map(x => `${x.nome}: meta de faturamento não preenchida na planilha (aba Previsao-Real).`);
+  cl.filter(x => (!selId || x.id === selId) && x.c.metaDesp != null && x.c.despReal != null && x.c.metaDesp < x.c.despReal * 0.6).forEach(x => avisos.push(`${x.nome}: a previsão de despesas do mês (${brl0(x.c.metaDesp)}) parece incompleta perto do que já foi pago (${brl0(x.c.despReal)}); a projeção usa o valor pago.`));
+  if (cl.some(x => (!selId || x.id === selId) && x.c.venda == null)) avisos.push("Venda do mês ainda não informada pela gestão: cobrança e projeção de venda aparecem quando ela for lançada.");
+  frame("mes", `
+    <div class="scroll" style="margin-top:8px">${D.comps.slice(0, 12).map(x => `<button class="chip" data-comp="${x}" aria-pressed="${x === comp}">${ml(x)}</button>`).join("")}</div>
+    <h1>${c.projFat != null ? (!sel && c.parcial && pf != null ? `${mesNome}: clínicas com meta projetam ${pct(pf, 0)} da meta` : `${mesNome}: projeção de ${brlK(c.projFat)}${pf != null ? `, ${pct(pf, 0)} da meta` : ""}`) : `${mesNome}: ${brlK(c.real)} até agora`}</h1>
+    <p class="sub">${esc(nome)} · ${c.ult ? `lançado até ${dt(c.ult)} · ${c.passados} de ${c.total} dias úteis, faltam ${c.faltam}` : "sem lançamentos ainda"}</p>
+    ${cl.length > 1 ? `<div class="scroll" id="mesCl"><button class="chip" data-cl="0" aria-pressed="${!selId}">Todas</button>${cl.map(x => `<button class="chip" data-cl="${x.id}" aria-pressed="${x.id === selId}">${esc(x.nome)}</button>`).join("")}</div>` : ""}
+    <div class="kpis" style="margin-top:10px">
+      <div class="kpi"><div class="l">Meta de faturamento</div><div class="v">${brlK(c.metaFat)}</div><span class="d mut">${c.parcial ? "só clínicas com meta" : "definida no início do mês"}</span></div>
+      <div class="kpi"><div class="l">Faturado até agora</div><div class="v">${brlK(c.real)}</div>${pctTag(sel ? pm(c.real, c.metaFat) : pm(c.realMeta, c.metaFat))}</div>
+      <div class="kpi ${pf != null && !bate ? "alert" : ""}"><div class="l">Projeção do mês</div><div class="v ${bate ? "good" : ""}">${brlK(c.projFat)}</div>${pctTag(pf)}</div>
+      <div class="kpi"><div class="l">Média por dia útil</div><div class="v">${brlK(c.mediaDia)}</div><span class="d mut">${c.precisaDia != null ? `precisa de ${brlK(c.precisaDia)}/dia` : "—"}</span></div>
+    </div>
+    ${avisos.length ? `<div class="banner">${svg("warn")}<span>${avisos.map(esc).join("<br>")}</span></div>` : ""}
+    <div class="grid two">
+      <div class="card"><h2>Faturamento diário</h2><p class="note">Total recebido no caixa em cada dia${sel ? "" : ", somando as clínicas"}. A linha tracejada é a média por dia útil que bate a meta.</p>
+        <div class="fig"><svg id="cDia" role="img" aria-label="Faturamento diário"></svg></div></div>
+      <div class="card"><h2>Venda, cobrança e total</h2><p class="note">Cobrança = faturamento − venda. Projeção pelos dias úteis (segunda a sábado, sem feriados).</p>
+        <div class="tbl"><table><thead><tr><th></th><th>Meta</th><th>Até agora</th><th>Projeção</th><th>% meta</th></tr></thead><tbody>
+          ${linhaVC("Venda", c.metaVenda, c.venda, c.projVenda)}${linhaVC("Cobrança", c.metaCob, c.cob, c.projCob)}${linhaVC("<b>Valor total</b>", c.metaFat, c.real, c.projFat)}
+        </tbody></table></div></div>
+      <div class="card span"><h2>Meta inicial × projeção</h2><p class="note">A despesa projetada é a prevista no início do mês (aba Previsão de Despesas) ou a já paga, se for maior.</p>
+        <div class="tbl"><table><thead><tr><th></th><th>Meta inicial</th><th>Projeção</th><th>Diferença</th></tr></thead><tbody>
+          <tr><td>Faturamento</td><td>${brl0(c.metaFat)}</td><td>${brl0(c.projFat)}</td><td class="${c.projFat != null && c.metaFat != null && c.projFat < c.metaFat ? "bad" : "good"}">${c.projFat != null && c.metaFat != null ? brl0(c.projFat - c.metaFat) : "—"}</td></tr>
+          <tr><td>Despesas <small class="mut">(pagas até agora: ${brl0(c.despReal)})</small></td><td>${brl0(c.metaDesp)}</td><td>${brl0(c.despProj)}</td><td class="${c.despProj > c.metaDesp ? "bad" : ""}">${c.despProj != null && c.metaDesp != null ? brl0(c.despProj - c.metaDesp) : "—"}</td></tr>
+          <tr style="font-weight:800"><td>Resultado</td><td class="${c.resPrev < 0 ? "bad" : ""}">${brl0(c.resPrev)}</td><td class="${c.resProj < 0 ? "bad" : "good"}">${brl0(c.resProj)}</td><td>${c.resProj != null && c.resPrev != null ? brl0(c.resProj - c.resPrev) : "—"}</td></tr>
+        </tbody></table></div></div>
+      ${!sel && cl.length > 1 ? `<div class="card span"><h2>Por clínica</h2><div class="tbl"><table class="grade"><thead><tr><th>Clínica</th><th>Meta</th><th>Até agora</th><th>Projeção</th><th>% meta</th><th>Despesa prevista</th><th>Resultado projetado</th></tr></thead><tbody>
+        ${cl.map(x => `<tr><td data-l="Clínica"><a href="#mes" data-cl="${x.id}">${esc(x.nome)}</a></td><td data-l="Meta">${brl0(x.c.metaFat)}</td><td data-l="Até agora">${brl0(x.c.real)}</td><td data-l="Projeção">${brl0(x.c.projFat)}</td><td data-l="% meta">${pm(x.c.projFat, x.c.metaFat) == null ? "—" : `<span class="${pm(x.c.projFat, x.c.metaFat) >= 1 ? "good" : "bad"}" style="font-weight:700">${pct(pm(x.c.projFat, x.c.metaFat), 0)}</span>`}</td><td data-l="Despesa prevista">${brl0(x.c.metaDesp)}</td><td data-l="Resultado projetado" class="${x.c.resProj < 0 ? "bad" : ""}">${brl0(x.c.resProj)}</td></tr>`).join("")}
+      </tbody></table></div></div>` : ""}
+    </div>
+    <p class="note" style="margin-top:14px">Atualizado com a planilha de caixa${cl.map(x => x.m.atualizado_em).sort().pop() ? ` em ${new Date(cl.map(x => x.m.atualizado_em).sort().pop()).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}.</p>`, true);
+  const nDias = new Date(Date.UTC(+comp.slice(0, 4), +comp.slice(5, 7), 0)).getUTCDate();
+  const porDia = Array.from({ length: nDias }, (_, i) => { const d = `${comp.slice(0, 8)}${String(i + 1).padStart(2, "0")}`; return (sel ? sel.dias : D.dias).filter(x => x.data === d).reduce((t, x) => t + +x.recebido, 0); });
+  const ref = c.metaFat != null && c.total ? c.metaFat / c.total : null;
+  chart("cDia", s => barsDia(s, porDia, ref, c.ult ? +c.ult.slice(8) : 0));
+  bindMes();
+}
+function barsDia(s, vals, ref, ult) {
+  const W = s.clientWidth, H = s.clientHeight, pb = 22, pt = 14, n = vals.length, bw = W / n;
+  const mx = Math.max(1, ref || 0, ...vals) * 1.08, y = v => H - pb - (H - pb - pt) * v / mx;
+  s.innerHTML = `<line x1="0" x2="${W}" y1="${H - pb}" y2="${H - pb}" stroke="var(--mut)"/>` +
+    vals.map((v, i) => { const w = Math.max(2, Math.min(18, bw * .66)), x = i * bw + (bw - w) / 2, h = (H - pb) - y(v);
+      return `<g><title>${i + 1}: ${brl(v)}</title>${v > 0 ? `<rect x="${x}" y="${y(v)}" width="${w}" height="${h}" rx="2" fill="var(--pos)" opacity="${ref && v < ref ? .55 : 1}"/>` : ""}${(i + 1) % (W < 520 ? 5 : 2) === 1 || i + 1 === ult ? `<text x="${i * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${i + 1 === ult ? "var(--ink)" : "var(--mut)"}" font-weight="${i + 1 === ult ? 800 : 400}">${i + 1}</text>` : ""}</g>`; }).join("") +
+    (ref ? `<line x1="0" x2="${W}" y1="${y(ref)}" y2="${y(ref)}" stroke="var(--neg)" stroke-dasharray="5 4"/><text x="${W - 4}" y="${y(ref) - 5}" text-anchor="end" font-size="12" fill="var(--neg)" font-weight="600">${esc(brlK(ref))}/dia</text>` : "");
+}
+function bindMes() {
+  document.querySelectorAll("[data-comp]").forEach(b => b.onclick = () => { S.mesComp = b.dataset.comp; viewMes(); });
+  document.querySelectorAll("[data-cl]").forEach(b => b.onclick = e => { e.preventDefault(); S.mesClin = +b.dataset.cl; viewMes(); });
+}
+
+/* Gestão: subir as planilhas de caixa e lançar venda/metas */
+const SIGLAS = { ipt: "ipatinga", gvs: "governador valadares", dvl: "divinopolis", div: "divinopolis", jua: "janauba", jau: "janauba", vic: "vicosa", vcs: "vicosa", orthopride: "vicosa" };
+function clinicaPorArquivo(nomeArq) {
+  const n = norm(nomeArq); for (const [k, v] of Object.entries(SIGLAS)) if (n.split(/[^a-z]+/).includes(k) || n.includes(k)) { const c = S.clins.find(x => norm(x.nome) === v); if (c) return c.id; }
+  return "";
+}
+async function admMes(el) {
+  const comp = S.admMesComp || hojeComp();
+  el.innerHTML = `<div class="spin">Carregando…</div>`;
+  const D = await loadMes(comp);
+  const nomeC = id => (S.clins.find(c => c.id === id) || {}).nome || id;
+  el.innerHTML = `<div class="card" style="margin-top:12px"><h2>Subir planilhas de caixa</h2>
+      <p class="note">Escolha um ou mais arquivos de caixa (IPT 2026, GVS 2026, DVL 26, JUA 2026, CAIXA mensal…). O portal lê a aba <b>Fluxo Caixa</b> (faturamento diário) e a <b>Previsao-Real</b> (meta de faturamento e de despesas).</p>
+      <label class="btn solid" for="cxf">${svg("doc")}Escolher arquivos</label><input id="cxf" type="file" accept=".xlsx,.xls" multiple style="position:absolute;width:1px;height:1px;opacity:0"><div id="cxPrev"></div></div>
+    <div class="card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2>${esc(mlong(comp))}</h2>
+      <div class="f" style="margin:0"><label class="lb" for="amc" style="font-weight:500">Mês</label><input id="amc" type="month" value="${comp.slice(0, 7)}"></div></div>
+      ${D.metas.length ? D.metas.map(m => { const c = calcMes(m, D.dias.filter(d => d.clinica_id === m.clinica_id), comp);
+        return `<div class="li" style="flex-wrap:wrap"><div class="t"><b>${esc(nomeC(m.clinica_id))}</b><small>Meta ${brl0(c.metaFat)} · até ${c.ult ? dt(c.ult) : "—"}: ${brl0(c.real)} · projeção ${brl0(c.projFat)} · despesa prevista ${brl0(c.metaDesp)}</small>
+          <small>Venda: meta ${brl0(c.metaVenda)} · realizada ${c.venda == null ? `<span class="bad">não informada</span>` : brl0(c.venda)}</small></div>
+          <div class="r"><button class="btn small" data-edm="${m.clinica_id}">Editar metas e venda</button></div></div>`; }).join("") : `<p class="empty">Nenhuma clínica carregada neste mês.</p>`}</div>`;
+  el.querySelector("#amc").onchange = e => { if (e.target.value) { S.admMesComp = e.target.value + "-01"; admMes(el); } };
+  el.onclick = e => { const b = e.target.closest("[data-edm]"); if (b) formMetas(D.metas.find(m => m.clinica_id === +b.dataset.edm), comp, () => admMes(el)); };
+  el.querySelector("#cxf").onchange = async e => {
+    const files = [...e.target.files], pv = el.querySelector("#cxPrev"); if (!files.length) return;
+    pv.innerHTML = `<p class="note">Lendo ${files.length} arquivo${files.length > 1 ? "s" : ""}…</p>`;
+    const lidos = [];
+    for (const f of files) { try { const wb = XLSX.read(await f.arrayBuffer(), { type: "array" }); lidos.push({ f, r: Caixa.lerCaixa(XLSX, wb), cid: clinicaPorArquivo(f.name) }); } catch (x) { lidos.push({ f, erro: x.message }); } }
+    const m0 = comp;
+    pv.innerHTML = `<h3 style="margin:16px 0 6px">Confira antes de salvar (${esc(mlong(m0))})</h3>` + lidos.map((l, i) => {
+      if (l.erro) return `<div class="li"><div class="t"><b>${esc(l.f.name)}</b><small class="bad">Não consegui ler: ${esc(l.erro)}</small></div></div>`;
+      const mm = l.r.meses[m0] || {}, dd = l.r.dias.filter(d => d.data.startsWith(m0.slice(0, 7))), ult = dd.filter(d => d.recebido > 0).pop();
+      return `<div class="li" style="flex-wrap:wrap"><div class="t"><b>${esc(l.f.name)}</b><small>Faturado ${brl0(mm.fat_caixa)} até ${ult ? dt(ult.data) : "—"} · meta ${brl0(mm.fat_prev)} · despesa prevista ${brl0(mm.desp_prev)} · paga ${brl0(mm.desp_real)}</small>${l.r.avisos.length ? `<small class="bad">${l.r.avisos.map(esc).join(" ")}</small>` : ""}</div>
+        <div class="r" style="min-width:190px"><select data-cxi="${i}" aria-label="Clínica de ${esc(l.f.name)}">${clinOpts(l.cid).replace("Escolha…", "Não importar")}</select></div></div>`;
+    }).join("") + `<label class="check"><input type="checkbox" id="cxRes">Atualizar também faturamento e despesas dos meses anteriores em Resultados</label>
+      <div class="actions"><button class="btn solid" id="cxSalvar">Salvar</button></div>`;
+    pv.querySelector("#cxSalvar").onclick = async ev => {
+      ev.target.disabled = true;
+      try {
+        let n = 0;
+        for (const s of pv.querySelectorAll("[data-cxi]")) {
+          const cid = +s.value, l = lidos[+s.dataset.cxi]; if (!cid || !l.r) continue;
+          const mm = l.r.meses[m0] || {}, dd = l.r.dias.filter(d => d.data.startsWith(m0.slice(0, 7)));
+          await q(sb.from("soc_mes").upsert({ clinica_id: cid, competencia: m0, meta_faturamento: mm.fat_prev || null, meta_despesa: mm.desp_prev ?? null, despesa_real: mm.desp_real ?? null, fonte: l.f.name, atualizado_em: new Date().toISOString() }, { onConflict: "clinica_id,competencia" }));
+          if (dd.length) await q(sb.from("soc_mes_dias").upsert(dd.map(d => ({ clinica_id: cid, data: d.data, recebido: d.recebido })), { onConflict: "clinica_id,data" }));
+          if (pv.querySelector("#cxRes").checked) {
+            const ups = Object.entries(l.r.meses).filter(([k, v]) => k < m0 && v.fat_caixa > 0).map(([k, v]) => ({ clinica_id: cid, competencia: k, faturamento: v.fat_caixa, ...(v.desp_real ? { despesas: Math.round(v.desp_real * 100) / 100 } : {}), atualizado_em: new Date().toISOString() }));
+            for (const u of ups) await q(sb.from("soc_resultados").upsert(u, { onConflict: "clinica_id,competencia" }));
+          }
+          n++;
+        }
+        toast(n ? `${n} clínica${n > 1 ? "s" : ""} atualizada${n > 1 ? "s" : ""}` : "Nenhuma clínica escolhida"); await refresh();
+      } catch (x) { toast(x.message); ev.target.disabled = false; }
+    };
+    e.target.value = "";
+  };
+}
+function formMetas(m, comp, depois) {
+  const v = x => x == null ? "" : Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+  modal(`${(S.clins.find(c => c.id === m.clinica_id) || {}).nome} · ${ml(comp)}`, `<form id="fmt" novalidate>
+    <div class="row2"><div class="f"><label class="lb" for="mf1">Meta de faturamento</label><input id="mf1" inputmode="decimal" value="${v(m.meta_faturamento)}"></div><div class="f"><label class="lb" for="mf2">Meta de despesas</label><input id="mf2" inputmode="decimal" value="${v(m.meta_despesa)}"></div></div>
+    <div class="row2"><div class="f"><label class="lb" for="mf3">Meta de venda</label><input id="mf3" inputmode="decimal" value="${v(m.meta_venda)}"></div><div class="f"><label class="lb" for="mf4">Meta de cobrança <small class="mut">(vazio = faturamento − venda)</small></label><input id="mf4" inputmode="decimal" value="${v(m.meta_cobranca)}"></div></div>
+    <div class="row2"><div class="f"><label class="lb" for="mf5">Venda realizada até hoje</label><input id="mf5" inputmode="decimal" value="${v(m.venda_realizada)}"></div><div class="f"><label class="lb" for="mf6">Dias úteis no mês <small class="mut">(vazio = automático: ${Caixa.diasUteis(comp).length})</small></label><input id="mf6" inputmode="numeric" value="${m.dias_uteis_total ?? ""}"></div></div>
+    <div class="err" id="mfe"></div><button class="btn solid" type="submit" style="width:100%">Salvar</button></form>`, (el, close) => {
+    el.querySelector("#fmt").onsubmit = async e => {
+      e.preventDefault(); const g = id => parseNum(el.querySelector(id).value);
+      const row = { clinica_id: m.clinica_id, competencia: comp, meta_faturamento: g("#mf1"), meta_despesa: g("#mf2"), meta_venda: g("#mf3"), meta_cobranca: g("#mf4"), venda_realizada: g("#mf5"), dias_uteis_total: g("#mf6"), atualizado_em: new Date().toISOString() };
+      if (Object.values(row).some(x => Number.isNaN(x))) { el.querySelector("#mfe").textContent = "Há um número inválido."; return; }
+      try { await q(sb.from("soc_mes").upsert(row, { onConflict: "clinica_id,competencia" })); close(); toast("Metas salvas"); depois(); } catch (x) { el.querySelector("#mfe").textContent = x.message; }
+    };
+  });
 }
 
 sb.auth.onAuthStateChange(ev => { if (ev === "SIGNED_OUT") { S.me = null; } });

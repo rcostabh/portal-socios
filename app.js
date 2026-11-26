@@ -703,17 +703,11 @@ async function viewMes() {
     <div class="grid two">
       <div class="card"><h2>Faturamento diário</h2><p class="note">Venda + cobrança de cada dia${sel ? "" : ", somando as clínicas"}. A linha tracejada é a média por dia útil que bate a meta.</p>
         <div class="fig"><svg id="cDia" role="img" aria-label="Faturamento diário"></svg></div></div>
-      <div class="card"><h2>Venda, cobrança e total</h2><p class="note">Dados do painel Dashboards Orthopride. Venda: média por dia útil × dias úteis do mês. Cobrança: projetada pela meta (100%), com o ritmo do mês passado abaixo.</p>
-        <div class="tbl"><table><thead><tr><th></th><th>Meta</th><th>Até agora</th><th>Projeção</th><th>% meta</th></tr></thead><tbody>
-          ${linhaVC("Venda", c.metaVenda, c.venda, c.projVenda)}${linhaVC("Cobrança <small class=\"mut\">(se bater 100%)</small>", c.metaCob, c.cob, c.projCob)}${linhaVC("<b>Valor total</b>", c.metaFat, c.real, c.projFat)}
-          ${c.cobRitmo != null ? `<tr><td colspan="5" style="white-space:normal;text-align:left;padding-top:12px"><span class="${c.difCob < 0 ? "bad" : "good"}" style="font-weight:700">Cobrança ${c.difCob < 0 ? "abaixo" : "acima"} do mês passado: ${brl0(Math.abs(c.difCob))}</span> no mesmo período. Nesse ritmo, a cobrança fecha em ${brl0(c.cobRitmo)} e o total em ${brl0(c.projFatRitmo)}${c.metaFat ? ` (${pct(c.projFatRitmo / c.metaFat, 1)} da meta)` : ""}.</td></tr>` : ""}
-        </tbody></table></div></div>
-      <div class="card span"><h2>Meta inicial × projeção</h2><p class="note">A despesa projetada é a prevista no início do mês (aba Previsão de Despesas) ou a já paga, se for maior.</p>
-        <div class="tbl"><table><thead><tr><th></th><th>Meta inicial</th><th>Projeção</th><th>Diferença</th></tr></thead><tbody>
-          <tr><td>Faturamento</td><td>${brl0(c.metaFat)}</td><td>${brl0(c.projFat)}</td><td class="${c.projFat != null && c.metaFat != null && c.projFat < c.metaFat ? "bad" : "good"}">${c.projFat != null && c.metaFat != null ? brl0(c.projFat - c.metaFat) : "—"}</td></tr>
-          <tr><td>Despesas <small class="mut">(pagas até agora: ${brl0(c.despReal)})</small></td><td>${brl0(c.metaDesp)}</td><td>${brl0(c.despProj)}</td><td class="${c.despProj > c.metaDesp ? "bad" : ""}">${c.despProj != null && c.metaDesp != null ? brl0(c.despProj - c.metaDesp) : "—"}</td></tr>
-          <tr style="font-weight:800"><td>Resultado</td><td class="${c.resPrev < 0 ? "bad" : ""}">${brl0(c.resPrev)}</td><td class="${c.resProj < 0 ? "bad" : "good"}">${brl0(c.resProj)}</td><td>${c.resProj != null && c.resPrev != null ? brl0(c.resProj - c.resPrev) : "—"}</td></tr>
-        </tbody></table></div></div>
+      <div class="card"><h2>Venda, cobrança e total</h2><p class="note">Venda: média por dia útil × dias úteis do mês. Cobrança: projetada pela meta (100%). A barra mostra o realizado; o traço, a projeção.</p>
+        ${blocoVC("Venda", c.metaVenda, c.venda, c.projVenda)}${blocoVC("Cobrança", c.metaCob, c.cob, c.projCob, "se bater 100%")}${blocoVC("Valor total", c.metaFat, c.real, c.projFat, "", true)}
+        ${c.cobRitmo != null ? `<p class="ritmo"><b class="${c.difCob < 0 ? "bad" : "good"}">Cobrança ${c.difCob < 0 ? "abaixo" : "acima"} do mês passado: ${brl0(Math.abs(c.difCob))}</b> no mesmo período. Nesse ritmo, a cobrança fecha em ${brl0(c.cobRitmo)} e o total em ${brl0(c.projFatRitmo)}${c.metaFat ? ` (${pct(c.projFatRitmo / c.metaFat, 1)} da meta)` : ""}.</p>` : ""}</div>
+      <div class="card span"><h2>Meta inicial × projeção</h2><p class="note">A despesa projetada é a prevista no início do mês (aba Previsão de Despesas) ou a já paga, se for maior (pagas até agora: ${brl0(c.despReal)}).</p>
+        ${linhaMx("Faturamento", c.metaFat, c.projFat, false)}${linhaMx("Despesas", c.metaDesp, c.despProj, true)}${linhaMx("Resultado", c.resPrev, c.resProj, false, true)}</div>
       ${!sel && cl.length > 1 ? `<div class="card span"><h2>Por clínica</h2><div class="tbl"><table class="grade"><thead><tr><th>Clínica</th><th>Meta</th><th>Até agora</th><th>Projeção</th><th>% meta</th><th>Despesa prevista</th><th>Resultado projetado</th></tr></thead><tbody>
         ${cl.map(x => `<tr><td data-l="Clínica"><a href="#mes" data-cl="${x.id}">${esc(x.nome)}</a></td><td data-l="Meta">${brl0(x.c.metaFat)}</td><td data-l="Até agora">${brl0(x.c.real)}</td><td data-l="Projeção">${brl0(x.c.projFat)}</td><td data-l="% meta">${pm(x.c.projFat, x.c.metaFat) == null ? "—" : `<span class="${pm(x.c.projFat, x.c.metaFat) >= 1 ? "good" : "bad"}" style="font-weight:700">${pct(pm(x.c.projFat, x.c.metaFat), 0)}</span>`}</td><td data-l="Despesa prevista">${brl0(x.c.metaDesp)}</td><td data-l="Resultado projetado" class="${x.c.resProj < 0 ? "bad" : ""}">${brl0(x.c.resProj)}</td></tr>`).join("")}
       </tbody></table></div></div>` : ""}
@@ -725,12 +719,27 @@ async function viewMes() {
   chart("cDia", s => barsDia(s, porDia, ref, c.ult ? +c.ult.slice(8) : 0));
   bindMes();
 }
+function blocoVC(rot, meta, real, proj, obs = "", forte = false) {
+  const p = pm(proj, meta), r = pm(real, meta), cls = p == null ? "mut" : p >= 1 ? "good" : "bad";
+  const w = v => Math.max(0, Math.min(100, (v || 0) * 100)).toFixed(1);
+  return `<div class="vc${forte ? " forte" : ""}"><div class="vc-h"><span>${rot}${obs ? ` <small class="mut">(${obs})</small>` : ""}</span><b class="${cls}">${p == null ? "—" : pct(p, 1)}</b></div>
+    <div class="vc-n"><span class="mut">Projeção</span><b>${brl0(proj)}</b></div>
+    <div class="vc-bar" role="img" aria-label="${esc(rot)}: realizado ${pct(r, 0)} e projeção ${pct(p, 0)} da meta"><i style="width:${w(r)}%"></i>${p != null ? `<em style="left:${w(p)}%"></em>` : ""}</div>
+    <div class="vc-s mut">Até agora ${brl0(real)} · meta ${brl0(meta)}</div></div>`;
+}
+function linhaMx(rot, meta, proj, inverso = false, forte = false) {
+  const dif = meta != null && proj != null ? proj - meta : null, ruim = dif != null && (inverso ? dif > 0 : dif < 0);
+  return `<div class="mx${forte ? " forte" : ""}"><span class="mx-l">${rot}</span>
+    <div><small>Meta inicial</small><b class="${forte && meta < 0 ? "bad" : ""}">${brl0(meta)}</b></div>
+    <div><small>Projeção</small><b class="${forte ? (proj < 0 ? "bad" : "good") : ""}">${brl0(proj)}</b></div>
+    <div><small>Diferença</small><b class="${dif == null ? "" : ruim ? "bad" : "good"}">${dif == null ? "—" : (dif > 0 ? "+" : "") + brl0(dif)}</b></div></div>`;
+}
 function barsDia(s, vals, ref, ult) {
   const W = s.clientWidth, H = s.clientHeight, pb = 22, pt = 14, n = vals.length, bw = W / n;
   const mx = Math.max(1, ref || 0, ...vals) * 1.08, y = v => H - pb - (H - pb - pt) * v / mx;
   s.innerHTML = `<line x1="0" x2="${W}" y1="${H - pb}" y2="${H - pb}" stroke="var(--mut)"/>` +
     vals.map((v, i) => { const w = Math.max(2, Math.min(18, bw * .66)), x = i * bw + (bw - w) / 2, h = (H - pb) - y(v);
-      return `<g><title>${i + 1}: ${brl(v)}</title>${v > 0 ? `<rect x="${x}" y="${y(v)}" width="${w}" height="${h}" rx="2" fill="var(--pos)" opacity="${ref && v < ref ? .55 : 1}"/>` : ""}${(i + 1) % (W < 520 ? 5 : 2) === 1 || i + 1 === ult ? `<text x="${i * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${i + 1 === ult ? "var(--ink)" : "var(--mut)"}" font-weight="${i + 1 === ult ? 800 : 400}">${i + 1}</text>` : ""}</g>`; }).join("") +
+      return `<g><title>${i + 1}: ${brl(v)}</title>${v > 0 ? `<rect x="${x}" y="${y(v)}" width="${w}" height="${h}" rx="2" fill="var(--pos)" opacity="${ref && v < ref ? .55 : 1}"/>` : ""}${((i + 1) % (W < 520 ? 5 : 2) === 1 && Math.abs(i + 1 - ult) > (W < 520 ? 2 : 1)) || i + 1 === ult ? `<text x="${i * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${i + 1 === ult ? "var(--ink)" : "var(--mut)"}" font-weight="${i + 1 === ult ? 800 : 400}">${i + 1}</text>` : ""}</g>`; }).join("") +
     (ref ? `<line x1="0" x2="${W}" y1="${y(ref)}" y2="${y(ref)}" stroke="var(--neg)" stroke-dasharray="5 4"/><text x="${W - 4}" y="${y(ref) - 5}" text-anchor="end" font-size="12" fill="var(--neg)" font-weight="600">${esc(brlK(ref))}/dia</text>` : "");
 }
 function bindMes() {

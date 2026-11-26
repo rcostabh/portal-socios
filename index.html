@@ -108,6 +108,20 @@ table.grade tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var(--
  table.grade tfoot td{border:0}
  table.grade td.empty{grid-column:1/-1;align-items:center}
 }
+.vc{padding:12px 0;border-bottom:1px solid var(--line)}.vc:last-of-type{border-bottom:0}
+.vc-h{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:15px}
+.vc-n{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin:2px 0 8px}.vc-n b{font-size:22px;font-weight:800;white-space:nowrap}
+.vc.forte .vc-h span{font-weight:800}
+.vc-bar{position:relative;height:10px;border-radius:5px;background:var(--chip)}
+.vc-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--pos)}
+.vc-bar em{position:absolute;top:-4px;bottom:-4px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--ink)}
+.vc-s{font-size:13px;margin-top:6px}
+.ritmo{font-size:14px;line-height:1.45;margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--bg)}
+.mx{display:grid;grid-template-columns:minmax(0,1.2fr) repeat(3,minmax(0,1fr));gap:4px 12px;align-items:end;padding:12px 0;border-bottom:1px solid var(--line)}
+.mx:last-child{border-bottom:0}.mx.forte .mx-l,.mx.forte b{font-weight:800}
+.mx-l{font-size:15px;align-self:center}.mx small{display:block;font-size:12px;color:var(--mut)}.mx b{font-weight:600;font-size:15px;white-space:nowrap}
+.mx div{text-align:right}
+@media(max-width:600px){.mx{grid-template-columns:repeat(3,minmax(0,1fr))}.mx-l{grid-column:1/-1}.mx div{text-align:left}.mx b{font-size:14px}}
 nav.bottom{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);z-index:5}
 nav.bottom a{flex:1;max-width:160px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;min-height:58px;color:var(--mut);text-decoration:none;font-size:12px;font-weight:600}
 nav.bottom a svg{width:24px;height:24px}
@@ -146,6 +160,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--ink);outline:none}
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="caixa.js?v=6"></script>
 <script src="config.js?v=5"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>

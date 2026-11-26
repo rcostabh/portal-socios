@@ -237,7 +237,7 @@ function viewInicio() {
         <div class="f"><label class="lb" for="fde">De</label><select id="fde" name="de">${opt("", "Início", F.de)}${meses.map(m => opt(m.slice(0, 7), ml(m), F.de)).join("")}</select></div>
         <div class="f"><label class="lb" for="fate">Até</label><select id="fate" name="ate">${opt("", "Mais recente", F.ate)}${meses.map(m => opt(m.slice(0, 7), ml(m), F.ate)).join("")}</select></div>
         <div class="f"><label class="lb" for="fst">Situação</label><select id="fst" name="st">${opt("", "Todas", F.st)}${opt("pend", "Falta receber", F.st)}${opt("pago", "Pagos", F.st)}${opt("sem", "Sem lucro", F.st)}</select></div>
-        <div class="f"><label class="lb" for="ford">Ordem</label><select id="ford" name="ord">${opt("desc", "Mais recente primeiro", F.ord)}${opt("asc", "Mais antigo primeiro", F.ord)}</select></div>
+        <div class="f"><label class="lb" for="ford">Ordem</label><select id="ford" name="ord">${opt("desc", "Recentes primeiro", F.ord)}${opt("asc", "Antigos primeiro", F.ord)}</select></div>
         ${filtrado ? `<div class="f" style="align-self:end"><button type="button" class="btn" id="limpar">Limpar filtros</button></div>` : ""}
       </form>
       <p class="note" style="margin:6px 0 10px">${rows.length} ${rows.length === 1 ? "linha" : "linhas"} · toque no nome da clínica para ver os gráficos dela.</p>
@@ -722,7 +722,8 @@ async function viewMes() {
 function blocoVC(rot, meta, real, proj, obs = "", forte = false) {
   const p = pm(proj, meta), r = pm(real, meta), cls = p == null ? "mut" : p >= 1 ? "good" : "bad";
   const w = v => Math.max(0, Math.min(100, (v || 0) * 100)).toFixed(1);
-  return `<div class="vc${forte ? " forte" : ""}"><div class="vc-h"><span>${rot}${obs ? ` <small class="mut">(${obs})</small>` : ""}</span><b class="${cls}">${p == null ? "—" : pct(p, 1)}</b></div>
+  const cat = /venda/i.test(rot) ? "cat-venda" : /cobran/i.test(rot) ? "cat-cobranca" : "cat-total";
+  return `<div class="vc ${cat}${forte ? " forte" : ""}"><div class="vc-h"><span>${rot}${obs ? ` <small class="mut">(${obs})</small>` : ""}</span><b class="${cls}">${p == null ? "—" : pct(p, 1)}</b></div>
     <div class="vc-n"><span class="mut">Projeção</span><b>${brl0(proj)}</b></div>
     <div class="vc-bar" role="img" aria-label="${esc(rot)}: realizado ${pct(r, 0)} e projeção ${pct(p, 0)} da meta"><i style="width:${w(r)}%"></i>${p != null ? `<em style="left:${w(p)}%"></em>` : ""}</div>
     <div class="vc-s mut">Até agora ${brl0(real)} · meta ${brl0(meta)}</div></div>`;
@@ -739,7 +740,7 @@ function barsDia(s, vals, ref, ult) {
   const mx = Math.max(1, ref || 0, ...vals) * 1.08, y = v => H - pb - (H - pb - pt) * v / mx;
   s.innerHTML = `<line x1="0" x2="${W}" y1="${H - pb}" y2="${H - pb}" stroke="var(--mut)"/>` +
     vals.map((v, i) => { const w = Math.max(2, Math.min(18, bw * .66)), x = i * bw + (bw - w) / 2, h = (H - pb) - y(v);
-      return `<g><title>${i + 1}: ${brl(v)}</title>${v > 0 ? `<rect x="${x}" y="${y(v)}" width="${w}" height="${h}" rx="2" fill="var(--pos)" opacity="${ref && v < ref ? .55 : 1}"/>` : ""}${((i + 1) % (W < 520 ? 5 : 2) === 1 && Math.abs(i + 1 - ult) > (W < 520 ? 2 : 1)) || i + 1 === ult ? `<text x="${i * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${i + 1 === ult ? "var(--ink)" : "var(--mut)"}" font-weight="${i + 1 === ult ? 800 : 400}">${i + 1}</text>` : ""}</g>`; }).join("") +
+      return `<g><title>${i + 1}: ${brl(v)}</title>${v > 0 ? `<rect x="${x}" y="${y(v)}" width="${w}" height="${h}" rx="2" fill="var(--bar, var(--pos))" opacity="${ref && v < ref ? .55 : 1}"/>` : ""}${((i + 1) % (W < 520 ? 5 : 2) === 1 && Math.abs(i + 1 - ult) > (W < 520 ? 2 : 1)) || i + 1 === ult ? `<text x="${i * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${i + 1 === ult ? "var(--ink)" : "var(--mut)"}" font-weight="${i + 1 === ult ? 800 : 400}">${i + 1}</text>` : ""}</g>`; }).join("") +
     (ref ? `<line x1="0" x2="${W}" y1="${y(ref)}" y2="${y(ref)}" stroke="var(--neg)" stroke-dasharray="5 4"/><text x="${W - 4}" y="${y(ref) - 5}" text-anchor="end" font-size="12" fill="var(--neg)" font-weight="600">${esc(brlK(ref))}/dia</text>` : "");
 }
 function bindMes() {

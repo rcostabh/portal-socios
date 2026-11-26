@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0A0B0E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sócios">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Portal dos Sócios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: boletim financeiro de bolso, calmo e direto, para sócios conferirem dinheiro no celular.
+   IDEA: um extrato: o que você investiu, o que já recebeu e o que ainda falta, mês a mês.
+   PICTURE: barras mensais da sua parte, verde-azulado o que foi pago, vinho o que falta.
+   COLOUR and TYPE: fundo rosa claro, tinta escura, teal = recebido/positivo, claret = pendente/negativo; Libre Franklin.
+   LAYOUT: uma coluna no celular com navegação embaixo; duas colunas a partir de 900px. */
+:root{color-scheme:light dark;
+--bg:light-dark(#ffe3dc,#1c1512);--card:light-dark(#fff4f0,#271e1a);--ink:light-dark(#1a1817,#f5ece8);
+--mut:light-dark(#5e5450,#b7aaa4);--line:light-dark(#e9c6bc,#3d302b);
+--pos:light-dark(#0d7680,#3fb3bd);--neg:light-dark(#990f3d,#ef6d93);--chip:light-dark(#f7d2c7,#33261f);
+--negbg:light-dark(#f9d0d9,#3a1b24)}
+*{box-sizing:border-box;min-width:0}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Libre Franklin",system-ui,sans-serif;overflow-x:clip;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1100px;margin:0 auto;padding:0 max(4vw,16px) calc(96px + env(safe-area-inset-bottom))}
+.top{display:flex;align-items:center;gap:10px;padding:calc(12px + env(safe-area-inset-top)) 0 8px}
+.top .who{flex:1;font-weight:800;font-size:17px;line-height:1.2}
+.top .who small{display:block;font-weight:400;color:var(--mut);font-size:13px}
+h1{font-size:clamp(28px,7vw,42px);line-height:1.08;font-weight:800;margin:14px 0 6px;text-wrap:balance;letter-spacing:-.01em}
+h2{font-size:19px;font-weight:800;margin:0 0 4px;line-height:1.25}
+h3{font-size:16px;font-weight:800;margin:0}
+.sub{color:var(--mut);margin:0 0 14px}
+.note{color:var(--mut);font-size:14px;margin:0 0 12px}
+.card{background:var(--card);border-radius:18px;padding:18px}
+.grid{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);margin-top:14px}
+@media(min-width:900px){.grid.two{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}.span{grid-column:1/-1}}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(min-width:700px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.kpi{background:var(--card);border-radius:16px;padding:14px}
+.kpi .l{font-size:14px;color:var(--mut)}
+.kpi .v{font-size:clamp(20px,5.4vw,27px);font-weight:800;white-space:nowrap;line-height:1.2;margin:2px 0}
+.kpi .d{white-space:normal}
+.kpi.alert{background:var(--negbg)}.kpi.alert .v,.kpi.alert .l{color:var(--neg)}
+.d{font-size:13px;font-weight:600;white-space:nowrap}
+.good{color:var(--pos)}.bad{color:var(--neg)}.mut{color:var(--mut)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:22px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);font:600 15px "Libre Franklin",sans-serif;cursor:pointer;white-space:nowrap;text-decoration:none}
+.btn.solid{background:var(--ink);color:var(--bg)}
+.btn.small{min-height:36px;padding:0 12px;font-size:14px}
+.btn.danger{border-color:var(--neg);color:var(--neg)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn svg{width:18px;height:18px}
+.link{background:none;border:0;color:var(--ink);text-decoration:underline;font:inherit;cursor:pointer;padding:10px 0;min-height:44px}
+:focus-visible{outline:3px solid var(--pos);outline-offset:2px}
+.scroll{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:4px 0}
+.scroll::-webkit-scrollbar{display:none}
+.chip{flex:none;min-height:40px;padding:0 14px;border-radius:20px;border:0;background:var(--chip);color:var(--ink);font:500 14px "Libre Franklin",sans-serif;cursor:pointer;white-space:nowrap}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--bg);font-weight:600}
+.banner{background:var(--negbg);color:var(--neg);border-radius:16px;padding:14px 16px;margin-top:14px;display:flex;gap:12px;align-items:flex-start}
+.banner svg{flex:none;width:22px;height:22px;margin-top:2px}
+.banner b{font-weight:800}
+.li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:15px}
+.li:last-child{border-bottom:0}
+.li .r{text-align:right;white-space:nowrap;font-weight:600}
+.li .t{min-width:0;flex:1}.li .t small{display:block;color:var(--mut);font-size:13px}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px;background:var(--chip);white-space:nowrap}
+.tag.neg{background:var(--negbg);color:var(--neg)}.tag.pos{color:var(--pos)}
+.clin{display:block;width:100%;text-align:left;background:var(--card);border:0;border-radius:16px;padding:16px;color:inherit;font:inherit;cursor:pointer;margin-bottom:10px}
+.clin .row1{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.clin .nm{font-weight:800;font-size:17px}
+.clin .meta{color:var(--mut);font-size:14px;margin-top:2px}
+.meter{height:10px;border-radius:5px;background:var(--chip);overflow:hidden;margin:10px 0 4px}
+.meter i{display:block;height:100%;background:var(--pos);border-radius:5px;transition:width .6s ease}
+.fig{position:relative;height:220px}.fig>svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:14px;margin-bottom:8px}
+.key{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.key i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--mut)}
+.filtros{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px}
+@media(min-width:900px){.filtros{grid-template-columns:repeat(6,minmax(0,1fr))}}
+.filtros .f{margin-bottom:8px}
+table.grade td a{color:var(--ink);font-weight:600}
+table.grade th:nth-child(2),table.grade td:nth-child(2){text-align:left}
+.wrap.largo{max-width:1280px}
+table.grade tbody tr.pend td:first-child{box-shadow:inset 3px 0 0 var(--neg)}
+table.grade tfoot td{font-weight:800;border-bottom:0;border-top:2px solid var(--ink)}
+@media(max-width:760px){
+ .tbl{overflow:visible}
+ table.grade thead{display:none}
+ table.grade,table.grade tbody,table.grade tfoot{display:block}
+ table.grade tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 10px;padding:12px 0 12px 12px;border-bottom:1px solid var(--line)}
+ table.grade tbody tr.pend{box-shadow:inset 3px 0 0 var(--neg)}
+ table.grade tbody tr.pend td:first-child{box-shadow:none}
+ table.grade td{display:flex;flex-direction:column;align-items:flex-start;text-align:left;border:0;padding:3px 0;white-space:normal;font-size:14px}
+ table.grade td::before{content:attr(data-l);font-size:12px;color:var(--mut);font-weight:500}
+ table.grade td[data-l=""]::before,table.grade td[data-l="Mês"]::before,table.grade td[data-l="Clínica"]::before{content:none}
+ table.grade td[data-l="Mês"],table.grade td[data-l="Clínica"]{font-size:16px}
+ table.grade td[data-l="Clínica"]{grid-column:span 2}
+ table.grade td[data-l="Situação"],table.grade td[data-l="Falta receber"]{grid-column:span 2}
+ table.grade tfoot tr{border-top:2px solid var(--ink);border-bottom:0}
+ table.grade tfoot td{border:0}
+ table.grade td.empty{grid-column:1/-1;align-items:center}
+}
+.vc{padding:12px 0;border-bottom:1px solid var(--line)}.vc:last-of-type{border-bottom:0}
+.vc-h{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:15px}
+.vc-n{display:flex;justify-content:space-between;gap:10px;align-items:baseline;margin:2px 0 8px}.vc-n b{font-size:22px;font-weight:800;white-space:nowrap}
+.vc.forte .vc-h span{font-weight:800}
+.vc-bar{position:relative;height:10px;border-radius:5px;background:var(--chip)}
+.vc-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--pos)}
+.vc-bar em{position:absolute;top:-4px;bottom:-4px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--ink)}
+.vc-s{font-size:13px;margin-top:6px}
+.ritmo{font-size:14px;line-height:1.45;margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--bg)}
+.mx{display:grid;grid-template-columns:minmax(0,1.2fr) repeat(3,minmax(0,1fr));gap:4px 12px;align-items:end;padding:12px 0;border-bottom:1px solid var(--line)}
+.mx:last-child{border-bottom:0}.mx.forte .mx-l,.mx.forte b{font-weight:800}
+.mx-l{font-size:15px;align-self:center}.mx small{display:block;font-size:12px;color:var(--mut)}.mx b{font-weight:600;font-size:15px;white-space:nowrap}
+.mx div{text-align:right}
+@media(max-width:600px){.mx{grid-template-columns:repeat(3,minmax(0,1fr))}.mx-l{grid-column:1/-1}.mx div{text-align:left}.mx b{font-size:14px}}
+nav.bottom{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav.bottom a{flex:1;max-width:160px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;min-height:58px;color:var(--mut);text-decoration:none;font-size:12px;font-weight:600}
+nav.bottom a svg{width:24px;height:24px}
+nav.bottom a[aria-current=page]{color:var(--ink)}
+.tabs{margin-top:6px}
+form .f{display:grid;gap:4px;margin-bottom:12px}
+label.lb{font-size:14px;font-weight:600}
+input,select,textarea{font:16px "Libre Franklin",sans-serif;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;min-height:44px;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--ink);outline:none}
+.check{display:flex;align-items:center;gap:10px;min-height:44px;font-size:15px;cursor:pointer}
+.check input{width:22px;height:22px;min-height:0;accent-color:var(--pos)}
+.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.cota{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.4fr) auto;gap:8px;align-items:end;margin-bottom:8px}
+@media(max-width:560px){.cota{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cota .cl{grid-column:1/-1}}
+.err{color:var(--neg);font-size:14px;min-height:20px}
+.login{max-width:420px;margin:0 auto;padding-top:calc(48px + env(safe-area-inset-top))}
+.login .mark{width:56px;height:56px;margin-bottom:12px}
+.modal{position:fixed;inset:0;background:rgb(0 0 0/.45);display:flex;align-items:flex-end;justify-content:center;z-index:20;padding:0}
+.modal>div{background:var(--card);width:100%;max-width:640px;max-height:92vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom))}
+@media(min-width:700px){.modal{align-items:center}.modal>div{border-radius:20px}}
+.mhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.x{background:none;border:0;color:var(--ink);width:44px;height:44px;font-size:26px;cursor:pointer;line-height:1}
+.code{font-size:34px;font-weight:800;letter-spacing:.15em;text-align:center;padding:12px;background:var(--bg);border-radius:14px;margin:10px 0}
+.toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-size:15px;opacity:0;pointer-events:none;transition:opacity .25s;max-width:90vw;z-index:30}
+.toast.on{opacity:1}
+.empty{color:var(--mut);padding:18px 0;text-align:center}
+.spin{padding:60px 0;text-align:center;color:var(--mut)}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<link rel="stylesheet" href="tema-escuro.css?v=2">
+</head>
+<body>
+<div id="app"><div class="spin">Carregando…</div></div>
+<div class="toast" id="toast" role="status"></div>
+<script src="vendor/supabase.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="caixa.js?v=6"></script>
+<script src="config.js?v=5"></script>
+<script src="app.js?v=10"></script>
+</body>
+</html>
